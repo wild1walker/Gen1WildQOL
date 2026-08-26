@@ -26,6 +26,12 @@
 --                the order these mods were built and tested against.  It is
 --                deliberately independent of the order they are written here,
 --                which is the order the menu reads them in.
+--   shared       this feature is carried by both bundles.  Exactly one may
+--                install it, so the first to load claims it and the other
+--                stands down; `storage` is the id its settings live under, so
+--                they do not move when the winner does.  See runtime/claims.lua.
+--   raw_option_keys  rows this feature writes by calling the engine's mod
+--                manager, which does not know about prefixes
 --   adapter      a file under adapters/, run after the feature installs
 --   suppress_hooks  engine hooks the feature must not register, because the
 --                bundle surfaces that setting itself
@@ -128,6 +134,55 @@ return {
       enabledKey = "enabled",
       default = true,
       aliases = { "Gen151", "gen151" },
+    },
+
+    -- ---- the furniture
+    --
+    -- These two are in Gen1WildUI as well, and deliberately.  They are not
+    -- really visual overhauls or conveniences: they are how every other
+    -- feature is reached.  A player who installs only this half should not
+    -- lose the mod manager redraw, and one who installs only the other half
+    -- should not lose it either -- so both carry them, and runtime/claims.lua
+    -- makes sure only one of them ever installs one.
+    --
+    -- Their settings are stored under `gen1_wild_shared` rather than under
+    -- either bundle, so which one won is invisible to the player: install the
+    -- other half later, and the row order and manager layout are still what
+    -- they were.
+
+    {
+      id = "menus",
+      priority = 900,
+      dir = "Gen1MenuManager",
+      entry = "main.lua",
+      label = "MENU LAYOUT",
+      description = "REORDER THE START AND PC MENUS, HIDE ROWS YOU NEVER TOUCH, AND PIN FIELD MOVES TO ROWS OF THEIR OWN.",
+      default = true,
+      aliases = { "Gen1MenuManager" },
+      shared = {
+        claim = "gen1wild_menu_manager",
+        storage = "gen1_wild_shared",
+        owner = "gen1_wild_ui",
+      },
+    },
+
+    {
+      id = "modmenu",
+      priority = 500,
+      dir = "Gen1ModMenu",
+      entry = "main.lua",
+      label = "MOD MANAGER",
+      description = "THE MOD MANAGER REDRAWN IN THE GAME'S OWN OPTION-SCREEN IDIOM, WITH SORTING AND FILTERS.",
+      default = true,
+      aliases = { "Gen1ModMenu", "gen1_mod_menu" },
+      -- Set from this mod's own in-game quick menu, which goes through the
+      -- engine manager's setOption and writes them unprefixed.
+      raw_option_keys = { "sort", "hide_disabled", "only_options" },
+      shared = {
+        claim = "gen1wild_mod_menu",
+        storage = "gen1_wild_shared",
+        owner = "gen1_wild_ui",
+      },
     },
 
     -- ---- experience sharing

@@ -23,6 +23,12 @@ itself, with its own settings one press of A away:
 | CAUGHT MARKER | Quality of Life | off |
 | AREA BANNER | Quality of Life | off |
 | EASY HM USE | Quality of Life | off |
+| MENU LAYOUT † | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) | on |
+| MOD MANAGER † | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) | on |
+
+† Carried by Gen1WildUI as well. With both bundles installed exactly one sets
+it up, and its settings live under a shared id so they do not move when the
+other bundle is the one that wins.
 
 ### Changed from upstream
 

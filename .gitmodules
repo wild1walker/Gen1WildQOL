@@ -22,3 +22,9 @@
 [submodule "upstream/QualityOfLife"]
 	path = upstream/QualityOfLife
 	url = https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol
+[submodule "upstream/Gen1MenuManager"]
+	path = upstream/Gen1MenuManager
+	url = https://github.com/wild1walker/Gen1MenuManager
+[submodule "upstream/Gen1ModMenu"]
+	path = upstream/Gen1ModMenu
+	url = https://github.com/wild1walker/Gen1ModMenu

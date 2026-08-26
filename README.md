@@ -1,7 +1,7 @@
 # Gen1WildQOL
 
 **The quality-of-life half of the [Gen1Wild](https://github.com/wild1walker/Gen1Wild)
-suite, as one mod.** Eleven features from eight repositories, each of which is
+suite, as one mod.** Thirteen features from ten repositories, each of which is
 still its own mod with its own releases — this bundles them, it does not fork
 them.
 
@@ -27,6 +27,14 @@ itself. Nothing is all-or-nothing.
 | **CAUGHT MARKER** | off | Quality of Life |
 | **AREA BANNER** | off | Quality of Life |
 | **EASY HM USE** | off | Quality of Life |
+| **MENU LAYOUT** † | on | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) |
+| **MOD MANAGER** † | on | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) |
+
+† Also in [Gen1WildUI](https://github.com/wild1walker/Gen1WildUI). These two are
+not really quality-of-life or visual — they are the furniture everything else
+is reached through — so both halves carry them and neither loses them. Install
+both bundles and exactly one of them sets it up; see
+[Features in both bundles](#features-in-both-bundles).
 
 ## The menu
 
@@ -68,6 +76,34 @@ CONTINUE, ALL 151, AREA BANNER — switch live.
   from that edge. `POSITION` moves it and `BOTTOM` restores the original.
 - **The four Quality of Life features are four rows**, not one submenu.
 - **EXP SHARE is configured here**, not on the engine's own OPTIONS screen.
+
+## Features in both bundles
+
+`MENU LAYOUT` and `MOD MANAGER` are in Gen1WildUI too. They are how every other
+feature is reached — the START menu, the PC menu, the mod manager itself — so
+neither half is the right place to put them and neither half should go without.
+
+Both bundles would install them twice, and neither mod guards against that:
+Gen1ModMenu would wrap the manager screen around its own wrapper, and
+Gen1MenuManager would apply its row order to an order it had already applied.
+So the two bundles agree on who does it. The first to load claims the feature
+through a table parked on a shared engine module; the second sees the claim and
+stands down, and its menu row says where the settings are:
+
+```
+GEN1WILD QOL
+  MENU LAYOUT     ON (SET UP IN GEN1WILD UI)
+```
+
+The switch on that row is still the real switch — settings for a shared feature
+are stored under `gen1_wild_shared` rather than under either bundle, so both
+menus read and write the same values, and installing the other half later does
+not reset anything.
+
+Which bundle wins does not matter and is not forced: both carry the same mod
+pinned at the same version. `tools/check.py` cross-checks the declaration
+against the other repo when it is checked out beside this one, because getting
+it wrong in one of them fails silently.
 
 Everything else behaves as its own mod does, because it *is* its own mod: the
 source is vendored unmodified and re-read on every sync.
@@ -118,6 +154,7 @@ runtime/              how a bundle hosts a mod written to be standalone
   facade.lua            the `mod` object each feature is handed instead
   optionset.lua         one options table for mods that each expected to own it
   registry.lua          mod.find, across features and across both bundles
+  claims.lua            who installs a feature that is in both bundles
   menu.lua              the OPTION screens
   bundle.lua            the order all of the above happens in
 adapters/             per-feature bundle glue, run after a feature installs

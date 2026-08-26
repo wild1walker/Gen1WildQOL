@@ -24,12 +24,18 @@
     "gen151",
     "exp_share",
     "quality_of_life",
-    "recomp-autosave"
+    "recomp-autosave",
+    "Gen1MenuManager",
+    "gen1_mod_menu"
   ],
   "incompatible": [],
-  "games": ["all"],
+  "games": [
+    "all"
+  ],
   "experimental": false,
-  "permissions": ["engine_internals"],
+  "permissions": [
+    "engine_internals"
+  ],
   "github": "wild1walker/Gen1WildQOL",
-  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound fixes, followers, all 151 catchable, EXP share and later-generation conveniences. Every feature switches on and off by itself."
+  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound fixes, followers, all 151 catchable, EXP share and later-generation conveniences, plus the menu layout and mod manager it shares with Gen1WildUI. Every feature switches on and off by itself."
 }
