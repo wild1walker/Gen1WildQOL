@@ -42,7 +42,9 @@ return {
         .. "already guards its own side on the enemy's fainted flag, and "
         .. "this is the matching guard for the player's",
       "the four Quality of Life features are four separate rows rather than "
-        .. "one submenu, because they have nothing to do with each other",
+        .. "one submenu, because they have nothing to do with each other, "
+        .. "and all four ship on -- the XP bar, the caught marker, a "
+        .. "three-second area banner and easy HM use",
       "EXP SHARE is configured in this bundle's menu rather than on the "
         .. "engine's OPTIONS screen, so every feature here has one home",
     },

@@ -26,7 +26,18 @@ local ORDER_INDEX = {}
 for i, mode in ipairs(ORDER) do ORDER_INDEX[mode] = i end
 local LABELS = { off = "OFF", gen1 = "GEN 1", gen5 = "GEN 5+",
                  balanced = "BALANCED", average = "AVERAGE", custom = "CUSTOM" }
-local SHARE_TEXT = "EXP is shared\namongst the party!"
+-- The shared-exp line.
+--
+-- The second line is capped at SEVENTEEN characters, and that is not a style
+-- choice. Gen 1's battle box draws character i at x = 8 + (i-1)*8, so the
+-- eighteenth lands on x=144 -- and the blinking continue arrow is drawn at
+-- exactly (18,16), x=144, by BattleState:draw. An eighteen-character second
+-- line therefore prints its last glyph underneath the arrow, which is what
+-- "amongst the party!" (18) did: the bang and the arrow rendered as one blob
+-- in the corner. Dropping the bang brings it to 17 and clears the arrow.
+--
+-- The first line has no such limit -- the arrow is only ever on the last row.
+local SHARE_TEXT = "EXP is shared\namongst the party"
 local SLOT_ORDER = { "all", "1", "2", "3", "4", "5", "6" }
 local SLOT_INDEX = {}
 for i, slot in ipairs(SLOT_ORDER) do SLOT_INDEX[slot] = i end

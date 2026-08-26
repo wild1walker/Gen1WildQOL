@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.1.0
+
+### Fixed
+
+- **The shared-EXP line no longer collides with the continue arrow.** Gen 1's
+  battle box draws character *i* at `x = 8 + (i-1)*8`, so the eighteenth lands
+  on x=144 — and the blinking arrow is drawn at exactly that column. The line
+  read `amongst the party!`, which is eighteen characters, so the bang and the
+  arrow rendered as one blob in the corner. It is now `amongst the party`.
+
+### Changed
+
+Four features that shipped off now ship on:
+
+| Feature | Was | Now |
+|---|---|---|
+| `BATTLE XP BAR` | off | **on** |
+| `CAUGHT MARKER` | off | **on** (`ON (Gen2)`) |
+| `AREA BANNER` | off | **on**, 3 seconds |
+| `EASY HM USE` | off | **on** |
+
+These only affect a save that has never carried the setting; a stored choice,
+including OFF, is untouched. `EASY HM USE`'s sub-rows are unchanged — `WATER
+INTERACTION` already shipped `FISH FIRST`, `REPEL PROMPT` already shipped on,
+and `CUT GRASS` inherits the master until it is set.
+
 ## 1.0.0
 
 First release. The quality-of-life half of the Gen1Wild index, consolidated

@@ -24,10 +24,10 @@ itself. Nothing is all-or-nothing.
 | **FOLLOWERS** | on | [Gen1Follower](https://github.com/wild1walker/Gen1Follower) |
 | **ALL 151** | on | [Gen151](https://github.com/wild1walker/Gen151) |
 | **EXP SHARE** | on, **GEN 5+** | originally [exp_share](https://github.com/ShaneMcGovernIE/exp_share) ‡ |
-| **BATTLE XP BAR** | off | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
-| **CAUGHT MARKER** | off | Quality of Life ‡ |
-| **AREA BANNER** | off | Quality of Life ‡ |
-| **EASY HM USE** | off | Quality of Life ‡ |
+| **BATTLE XP BAR** | on | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
+| **CAUGHT MARKER** | on | Quality of Life ‡ |
+| **AREA BANNER** | on, 3s | Quality of Life ‡ |
+| **EASY HM USE** | on | Quality of Life ‡ |
 | **MENU LAYOUT** † | on | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) |
 | **MOD MANAGER** † | on | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) |
 
@@ -55,7 +55,7 @@ OPTION
       SPRINT ON BIKE  OFF
       RESET DEFAULTS
     AUTO SAVE         ON (CONFIGURE)
-    AREA BANNER       ON (2 SECONDS)
+    AREA BANNER       ON (3 SECONDS)
     ...
 ```
 

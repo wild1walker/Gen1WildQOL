@@ -230,7 +230,12 @@ return {
       entry = "bundle_xp_bar.lua",
       label = "BATTLE XP BAR",
       description = "A GEN 2 STYLE EXPERIENCE BAR UNDER YOUR POKEMON IN BATTLE.",
-      default = false,
+      default = true,
+      -- The master switch decides whether the feature is installed; the
+      -- feature's own row decides whether it draws. Both have to be on for
+      -- the bar to appear, so the row is defaulted here alongside the
+      -- switch -- otherwise ON would install something set to OFF.
+      defaults = { qol_exp_bar = "on" },
       gen1_only = true,
       aliases = { "qol_xp_bar" },
     },
@@ -243,7 +248,10 @@ return {
       entry = "bundle_caught_indicator.lua",
       label = "CAUGHT MARKER",
       description = "SHOWS WHETHER YOU HAVE ALREADY CAUGHT THE POKEMON YOU ARE FIGHTING.",
-      default = false,
+      default = true,
+      -- "gen2" is the first of its three ON styles; RED and GREY are the
+      -- Gen 1 looks, one row away.
+      defaults = { qol_caught_indicator = "gen2" },
       aliases = { "qol_caught_indicator" },
     },
 
@@ -259,7 +267,9 @@ return {
       -- OFF is already one of its values, so the switch is live and the menu
       -- row can say how long the sign stays up instead of merely ON.
       enabledKey = "qol_location_banners",
-      default = false,
+      -- The master here is the duration, so its default is a number of
+      -- seconds rather than a boolean.
+      default = 3,
       aliases = { "qol_location_banners" },
     },
 
@@ -271,7 +281,11 @@ return {
       entry = "bundle_easy_interactions.lua",
       label = "EASY HM USE",
       description = "PRESS A AT BUSHES, BOULDERS AND WATER TO USE CUT, STRENGTH, SURF OR A ROD WITHOUT THE MENU.",
-      default = false,
+      default = true,
+      -- Its sub-rows need nothing here: WATER INTERACTION already ships
+      -- FISH FIRST, REPEL PROMPT already ships on, and CUT GRASS inherits
+      -- this row when it has never been set.
+      defaults = { qol_easy_interactions = true },
       aliases = { "qol_easy_interactions" },
     },
   },
