@@ -67,7 +67,8 @@ A row marked `*` needs a relaunch to take effect, and the footer says so. That
 happens for features whose upstream mod has no off switch of its own: the
 bundle gates those at load rather than pretending to switch something that is
 already installed. Features that do have one — SPRINT, AUTO SAVE, AUTO
-CONTINUE, ALL 151, AREA BANNER — switch live.
+CONTINUE, ALL 151, AREA BANNER, BATTLE XP BAR, CAUGHT MARKER and EASY HM USE
+— switch live.
 
 ## What is different from the standalone mods
 

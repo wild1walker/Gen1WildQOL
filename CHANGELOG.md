@@ -10,6 +10,15 @@
   read `amongst the party!`, which is eighteen characters, so the bang and the
   arrow rendered as one blob in the corner. It is now `amongst the party`.
 
+- **`EASY HM USE` did nothing when switched on.** It — and `BATTLE XP BAR` and
+  `CAUGHT MARKER` with it — had *two* switches: the bundle's, which only
+  decided whether to install the feature, and the feature's own row, which
+  decided whether it did anything. Turning the feature on installed something
+  still set to OFF, and the row that actually mattered sat one screen down
+  saying the opposite. Each feature's own row is now its master, the way
+  `AREA BANNER`'s already was, so there is one switch — and a live one, with
+  no relaunch.
+
 ### Changed
 
 Four features that shipped off now ship on:
@@ -22,7 +31,8 @@ Four features that shipped off now ship on:
 | `EASY HM USE` | off | **on** |
 
 These only affect a save that has never carried the setting; a stored choice,
-including OFF, is untouched. `EASY HM USE`'s sub-rows are unchanged — `WATER
+including OFF, is untouched. All four switch live now — none of them are among
+the rows the menu marks with an asterisk. `EASY HM USE`'s sub-rows are unchanged — `WATER
 INTERACTION` already shipped `FISH FIRST`, `REPEL PROMPT` already shipped on,
 and `CUT GRASS` inherits the master until it is set.
 

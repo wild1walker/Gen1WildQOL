@@ -230,12 +230,16 @@ return {
       entry = "bundle_xp_bar.lua",
       label = "BATTLE XP BAR",
       description = "A GEN 2 STYLE EXPERIENCE BAR UNDER YOUR POKEMON IN BATTLE.",
-      default = true,
-      -- The master switch decides whether the feature is installed; the
-      -- feature's own row decides whether it draws. Both have to be on for
-      -- the bar to appear, so the row is defaulted here alongside the
-      -- switch -- otherwise ON would install something set to OFF.
-      defaults = { qol_exp_bar = "on" },
+      -- The master is the feature's own row, not a switch of the bundle's.
+      -- It used to be the latter, and that was a bug: the synthesized switch
+      -- only decided whether to INSTALL, while this row decides whether the
+      -- feature does anything -- so turning the feature on installed
+      -- something still set to OFF, and the row that actually mattered was
+      -- buried one screen down saying the opposite. Donating the row makes
+      -- the two one switch, and a live one: the feature reads it every time
+      -- it acts, so there is nothing to relaunch.
+      enabledKey = "qol_exp_bar",
+      default = "on",
       gen1_only = true,
       aliases = { "qol_xp_bar" },
     },
@@ -248,10 +252,18 @@ return {
       entry = "bundle_caught_indicator.lua",
       label = "CAUGHT MARKER",
       description = "SHOWS WHETHER YOU HAVE ALREADY CAUGHT THE POKEMON YOU ARE FIGHTING.",
-      default = true,
-      -- "gen2" is the first of its three ON styles; RED and GREY are the
-      -- Gen 1 looks, one row away.
-      defaults = { qol_caught_indicator = "gen2" },
+      -- The master is the feature's own row, not a switch of the bundle's.
+      -- It used to be the latter, and that was a bug: the synthesized switch
+      -- only decided whether to INSTALL, while this row decides whether the
+      -- feature does anything -- so turning the feature on installed
+      -- something still set to OFF, and the row that actually mattered was
+      -- buried one screen down saying the opposite. Donating the row makes
+      -- the two one switch, and a live one: the feature reads it every time
+      -- it acts, so there is nothing to relaunch.
+      -- Its OFF is a choice value rather than false, and RED and GREY
+      -- are the Gen 1 looks beside GEN2.
+      enabledKey = "qol_caught_indicator",
+      default = "gen2",
       aliases = { "qol_caught_indicator" },
     },
 
@@ -281,11 +293,18 @@ return {
       entry = "bundle_easy_interactions.lua",
       label = "EASY HM USE",
       description = "PRESS A AT BUSHES, BOULDERS AND WATER TO USE CUT, STRENGTH, SURF OR A ROD WITHOUT THE MENU.",
+      -- The master is the feature's own row, not a switch of the bundle's.
+      -- It used to be the latter, and that was a bug: the synthesized switch
+      -- only decided whether to INSTALL, while this row decides whether the
+      -- feature does anything -- so turning the feature on installed
+      -- something still set to OFF, and the row that actually mattered was
+      -- buried one screen down saying the opposite. Donating the row makes
+      -- the two one switch, and a live one: the feature reads it every time
+      -- it acts, so there is nothing to relaunch.
+      -- Its sub-rows are unchanged: WATER INTERACTION ships FISH FIRST,
+      -- REPEL PROMPT ships on, CUT GRASS inherits this row until set.
+      enabledKey = "qol_easy_interactions",
       default = true,
-      -- Its sub-rows need nothing here: WATER INTERACTION already ships
-      -- FISH FIRST, REPEL PROMPT already ships on, and CUT GRASS inherits
-      -- this row when it has never been set.
-      defaults = { qol_easy_interactions = true },
       aliases = { "qol_easy_interactions" },
     },
   },
