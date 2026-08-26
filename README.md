@@ -260,7 +260,9 @@ who looks after the code, not who wrote it:
   **[pret](https://github.com/pret)** — the engine and the disassemblies all of
   it stands on.
 
-Each tracked mod keeps its own licence file under `modules/<Feature>/`.
+The bundling is MIT -- see [LICENSE](LICENSE), which says what that does
+and does not cover. Each tracked mod keeps its own licence file under
+`modules/<Feature>/`, and those are the terms for that feature.
 
 Contributions to a **tracked** feature belong in that mod's own repository,
 behind its link above. Contributions to a **maintained** one, and fixes to the
