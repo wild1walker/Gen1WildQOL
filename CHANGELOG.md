@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.1
+
+Follows two of its mods; everything else here is already on its newest release.
+No option key was added, renamed or removed, so nothing in the menu moves.
+
+- **FOLLOWERS** → [Gen1Follower](https://github.com/wild1walker/Gen1Follower)
+  1.2.1. Followers now darken with the rest of an unlit cave instead of walking
+  around Rock Tunnel in full colour while everything else is a silhouette.
+- **REMEMBER MOVES** → [Gen1Remember](https://github.com/wild1walker/Gen1Remember)
+  1.0.1. The popup drops its heading: the row you pressed already said REMEMBER
+  and the box opens over it, so the title repeated the word back at you.
+
 ## 1.4.0
 
 Adds **REMEMBER MOVES**, from

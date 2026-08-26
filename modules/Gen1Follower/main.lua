@@ -608,6 +608,47 @@ return function(mod)
   end
   SpriteRenderer.resolveImage = wrappedResolveImage
 
+  -- A dark cave paints every OBJ on screen with the darkest shade it owns.
+  -- Gen 1 arms PaletteFX.DARK_BGP for the frame (home/fade.asm's FadePal2
+  -- also writes rOBP0 = `dc 3,3,3,2`, so every sprite colour lands on shade
+  -- 3) and Gen 2 loads the DARKNESS palette set, whose sprite rows are black
+  -- -- the player, NPCs and item balls are silhouettes until FLASH. Full
+  -- colour follower art skipped both: it is replayed unshaded on top of the
+  -- colorized pass, or exempted from it by a trueColor rect, so the follower
+  -- walked around Rock Tunnel in daylight colours next to a blacked-out
+  -- player. Paint it with the shade the engine leaves the player instead.
+  local function darkFrame()
+    if isGen2 then
+      -- No wMapPalOffset here: a PALETTE_DARK map FLASH has not lit yet
+      -- simply reads as the DARK time of day (Palettes.daytimeFor).
+      local world = worldFor(liveGame())
+      return (world and world.daytime == "DARK") or false
+    end
+    -- The shade map is armed per frame -- OverworldState:drawWorld sets it
+    -- while it draws a dark map and leaves it nil for a battle drawn over
+    -- one, which is lit -- so it tracks the frame, not the map.
+    if type(PaletteFX.shadeMap) == "function" then
+      return PaletteFX.shadeMap() ~= nil
+    end
+    return type(PaletteFX.darkWorld) == "function" and PaletteFX.darkWorld()
+      or false
+  end
+
+  -- Shade 3 of the palette this frame paints objects with. Gen 1 draws into
+  -- a DMG-shade canvas that the zone shader colorizes, so shade 3 is plain
+  -- black there and comes back out of the shader as the very colour the
+  -- player's silhouette wears. Gen 2 bakes real colour into the sheet
+  -- instead and hands the renderer the OBJ palette it baked.
+  local function darkObjectShade(sprite)
+    local colors = sprite and sprite.objColors
+    local c = type(colors) == "table" and colors[4] or nil
+    if type(c) == "table" then
+      return (tonumber(c[1]) or 0) / 255, (tonumber(c[2]) or 0) / 255,
+        (tonumber(c[3]) or 0) / 255
+    end
+    return 0, 0, 0
+  end
+
   local origSpriteDraw = SpriteRenderer.draw
   local wrappedSpriteDraw
   wrappedSpriteDraw = function(self, px, py, camX, camY, facing, walkPhase, stepFlip)
@@ -633,8 +674,12 @@ return function(mod)
       local flipSx = flip and -1 or 1
 
       local scale = followerVisualScale(activeMon.species)
-      if math.abs(scale - 1) < 0.0001
-         or not (love and love.graphics and love.graphics.draw) then
+      local unscaled = math.abs(scale - 1) < 0.0001
+      local canDraw = love and love.graphics and love.graphics.draw
+        and love.graphics.setColor and love.graphics.getColor and true or false
+      local dark = canDraw and darkFrame()
+
+      if not dark and (unscaled or not canDraw) then
         PaletteFX.markSpriteRedraw(followerImg, quad, drawX, y, flipSx, nil, false)
         return
       end
@@ -643,11 +688,30 @@ return function(mod)
       -- or sink into the map. The logical entity remains one 16x16 cell.
       local anchorX, anchorY = x + 8, y + 16
       local w, h = 16 * scale, 16 * scale
+      local sx = flip and -scale or scale
+
+      if dark then
+        -- Straight onto the world canvas, with neither a trueColor rect nor
+        -- a post-zone replay: both exist to keep the art out of the colorize
+        -- pass, and in the dark that pass is exactly what has to reach it.
+        -- The alpha in hand carries any fade the frame is already under.
+        local r, g, b, a = love.graphics.getColor()
+        local dr, dg, db = darkObjectShade(self)
+        love.graphics.setColor(dr, dg, db, a)
+        if unscaled then
+          love.graphics.draw(followerImg, quad, drawX, y, 0, flipSx, 1)
+        else
+          love.graphics.draw(followerImg, quad, anchorX, anchorY,
+            0, sx, scale, 8, 16)
+        end
+        love.graphics.setColor(r, g, b, a)
+        return
+      end
+
       if self.def.trueColor and PaletteFX.markTrueColor then
         PaletteFX.markTrueColor(math.floor(anchorX - w / 2),
           math.floor(anchorY - h), math.ceil(w), math.ceil(h))
       end
-      local sx = flip and -scale or scale
       love.graphics.draw(followerImg, quad, anchorX, anchorY,
         0, sx, scale, 8, 16)
       return

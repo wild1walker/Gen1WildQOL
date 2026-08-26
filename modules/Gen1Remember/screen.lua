@@ -178,11 +178,11 @@ return function(mod, Relearn)
       -- the POKéMON the popup is about stays visible above it
       tx = 4, ty = math.max(0, 18 - th), tw = 12, th = th,
       maxVisible = VISIBLE,
-      -- Menu whites out exactly as many tiles as the title is wide and puts
-      -- it straight onto the top rule, so an unpadded title has the rule
-      -- running into its first and last letter.  The padding is added here
-      -- rather than inside the string so the catalog key stays the word.
-      title = " " .. Strings("REMEMBER") .. " ",
+      -- No title on the frame.  The row that opened this popup already said
+      -- REMEMBER and the box comes up over it, so a heading repeats the word
+      -- the player just pressed -- and the vanilla screen this is standing in
+      -- for, the forget list in MoveLearnMenu, has no heading either: it is a
+      -- framed column of move names and nothing else.
       noSound = true,
       onCancel = done,
     })
