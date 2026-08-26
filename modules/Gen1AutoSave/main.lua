@@ -8,7 +8,10 @@
 --   * nothing happened since the last write => no write, so idling on the map
 --     never bumps the save revision or wakes an upload
 --   * never writes while sync is mid-transfer or holding an unresolved
---     conflict; the save is retried once sync settles
+--     conflict OVER THIS SAVE; the save is retried once sync settles
+--   * a "conflict" whose two sides share a sessionStart is this device's own
+--     lost upload, not a second player: answered with keep-this-device rather
+--     than put to the player, who has nothing to decide
 --   * one floor between writes, so a row of doors can't hammer the file
 --   * picking QUIT offers the save in the confirm box, and the quit waits
 --     for the write -- and for the upload it starts -- before it leaves
@@ -25,6 +28,8 @@
 return function(mod)
   local MIN_GAP = 20        -- seconds between any two autosaves
   local SYNC_RETRY = 2.0    -- re-check a busy sync this often
+  local HOLD_GRACE = 15     -- a conflict has to stand this long to be said
+  local HEAL_TRIES = 3      -- give up healing one key after this many goes
   local NOTIFY_TIME = 1.6
   local GC_STEP = 4096      -- collector work per step, in KB of allocation
   local GC_STEPS = 12       -- ceiling: a cycle on a game-sized heap, no more
@@ -64,6 +69,9 @@ return function(mod)
     syncWasBusy = false,
     notify = 0,
     heldTold = false,
+    heldSince = nil,
+    healKey = nil,
+    healTries = 0,
     game = nil,
   }
 
@@ -109,6 +117,14 @@ return function(mod)
       label = "ON QUIT",
       default = true,
       help = "Offer to save in the QUIT confirm, and wait for it.",
+      visible_if = { key = "enabled", equals = true },
+    },
+    {
+      key = "heal",
+      type = "toggle",
+      label = "HEAL CONFLICTS",
+      default = true,
+      help = "Answer a sync conflict with your own older upload on both sides.",
       visible_if = { key = "enabled", equals = true },
     },
     {
@@ -192,10 +208,138 @@ return function(mod)
     return engine
   end
 
+  -- WHOSE conflict is it?  engine.phase is one word for the whole engine, but
+  -- the disagreement it stands for is always about one save: the planner walks
+  -- every local file it can see and raises a row per key that changed on both
+  -- ends (SyncEngine:_planFrom -> _addConflict), so an old playthrough this
+  -- account also has on another device turns the phase to "conflict" while the
+  -- file we are playing is not in dispute at all.  Holding this game's writes
+  -- for that buys nothing -- our save is not the one with two sides.
+  --
+  -- engine.protectedKey is the key of the save being played.  It is not stale:
+  -- Game:syncEngine() re-stamps it from the live save on every call, and
+  -- syncEngineOf just made that call.
+  local function conflictIsOurs(engine)
+    local key, rows
+    pcall(function() key = engine.protectedKey end)
+    pcall(function() rows = engine.conflicts end)
+    -- An engine that cannot say which save it means, or which are in dispute,
+    -- gets the careful answer: assume the hold is ours and leave the file be.
+    if type(key) ~= "string" or type(rows) ~= "table" then return true end
+    for _, row in ipairs(rows) do
+      if type(row) == "table" and row.key == key then return true end
+    end
+    return false
+  end
+
+  -- Which conflict, in the terms the launcher's own screen uses for it: two
+  -- savedAt stamps and the key they disagree about.  "A conflict is standing"
+  -- is not something a player can go and check; "this device 21:42, other
+  -- device 21:37" is the same line the SAVE SYNC screen will show them.
+  local function stampText(meta)
+    local at = type(meta) == "table" and tonumber(meta.savedAt)
+    local ok, text = pcall(os.date, "%Y-%m-%d %H:%M", at or 0)
+    return (at and ok) and text or "?"
+  end
+
+  local function conflictDetail(engine)
+    local key, rows
+    pcall(function() key = engine.protectedKey end)
+    pcall(function() rows = engine.conflicts end)
+    if type(rows) ~= "table" then return nil end
+    for _, row in ipairs(rows) do
+      -- no key to match on means we already gave the hold the careful reading,
+      -- so describe the row that reading was about: the first one
+      if type(row) == "table" and (type(key) ~= "string" or row.key == key) then
+        return string.format("%s (this device %s, other device %s)",
+          tostring(row.key), stampText(row.localMeta),
+          stampText(row.remoteMeta))
+      end
+    end
+    return nil
+  end
+
+  -- ---------- the conflict that is not one
+  --
+  -- "These saves were played at the same time" does not mean two people.
+  -- SyncEngine.overlaps compares [sessionStart, savedAt] on the two sides, and
+  -- ONE sessionStart covers a whole play session: Game.sessionStartedAt is
+  -- stamped at init and at load, and SaveData.buildMeta copies it into every
+  -- save meta written until the game is closed.  So two revisions of one
+  -- session always overlap, and the wording is about the intervals rather than
+  -- about devices.
+  --
+  -- When both sides carry the SAME sessionStart they are not two sessions at
+  -- all.  A second device would have called os.time() for its own, on its own
+  -- load of this playthrough; matching to the second is not something two
+  -- machines do.  It is one device's file, twice.
+  --
+  -- Which happens with nobody doing anything wrong.  An upload the server
+  -- commits but whose reply never lands -- a dropped connection, a phone
+  -- putting the app to sleep -- leaves state.revs behind the rev the server
+  -- now has.  The next plan then reads a save that moved on both ends:
+  -- localChanged because we kept playing, remoteChanged because our own upload
+  -- did arrive after all.  Nothing on this side can prevent that; by the time
+  -- we could look, the reply is already lost.  It can only be recognised
+  -- afterwards, and it has exactly one honest answer -- keep this device,
+  -- which is the far copy's own successor rather than a rival to it.
+  local function selfConflict(engine)
+    local key, rows
+    pcall(function() key = engine.protectedKey end)
+    pcall(function() rows = engine.conflicts end)
+    if type(key) ~= "string" or type(rows) ~= "table" then return nil end
+    for _, row in ipairs(rows) do
+      if type(row) == "table" and row.key == key then
+        local mine = type(row.localMeta) == "table" and row.localMeta
+        local theirs = type(row.remoteMeta) == "table" and row.remoteMeta
+        if not (mine and theirs) then return nil end
+        local ourStart, theirStart =
+          tonumber(mine.sessionStart), tonumber(theirs.sessionStart)
+        local ourSaved, theirSaved =
+          tonumber(mine.savedAt), tonumber(theirs.savedAt)
+        -- All of it, or it is a real disagreement and none of our business:
+        -- one session, said by both sides, and the far side is the revision
+        -- ours came after rather than one that went somewhere else.
+        if ourStart and theirStart and ourStart > 0 and ourStart == theirStart
+            and ourSaved and theirSaved and theirSaved <= ourSaved then
+          return row
+        end
+        return nil        -- one row per key; this was ours and it did not fit
+      end
+    end
+    return nil
+  end
+
+  -- Answer it once, the way the player would have had to.  resolveConflict is
+  -- the launcher's own "Keep this device" button: it points state.revs at the
+  -- rev we never heard about and force-uploads the file we are actually
+  -- playing, which is what the lost reply was trying to say to begin with.
+  --
+  -- Capped, because a heal that keeps coming back is a heal that is wrong
+  -- about something.  After HEAL_TRIES on one key the mod stops and lets the
+  -- badge and the launcher have it, which is where this used to start.
+  local function healSelfConflict(engine)
+    if not mod.options:get("heal") then return false end
+    if type(engine.resolveConflict) ~= "function" then return false end
+    local row = selfConflict(engine)
+    if not row then return false end
+    if state.healKey ~= row.key then
+      state.healKey, state.healTries = row.key, 0
+    end
+    if state.healTries >= HEAL_TRIES then return false end
+    state.healTries = state.healTries + 1
+    local ok, done = pcall(engine.resolveConflict, engine, row.key, "local")
+    if not (ok and done ~= false) then return false end
+    mod.log:info("autosave healed a self-conflict on %s: our own upload from "
+      .. "%s, against the file we are still playing (%s)",
+      tostring(row.key), stampText(row.remoteMeta), stampText(row.localMeta))
+    return true
+  end
+
   local function syncConflicted(engine)
     local conflict = false
     pcall(function() conflict = engine.phase == "conflict" end)
-    return conflict
+    return conflict and conflictIsOurs(engine)
   end
 
   local function syncTransferring(engine)
@@ -368,15 +512,42 @@ return function(mod)
     end
   end
 
-  -- An unresolved sync conflict holds every write, with no timeout and no way
-  -- out but the player answering the launcher's prompt -- so staying quiet
-  -- about it reads exactly like the mod having stopped working.  Said once
-  -- per hold, not once per frame: it is a standing condition, not an event.
-  local function tellHeld(why)
+  -- An unresolved sync conflict over this save holds every write, and staying
+  -- quiet about that reads exactly like the mod having stopped working.  Said
+  -- once per hold, not once per frame: it is a standing condition, not an
+  -- event.
+  --
+  -- But only once it has actually stood.  "Conflict" was treated here as a
+  -- state only the player can leave, and it is not one: SyncEngine:syncNow()
+  -- empties self.conflicts and re-plans from scratch, and the upload-debounce
+  -- path in SyncEngine:update() reaches it with no phase guard at all -- so a
+  -- conflict raised by one plan can be gone by the next with nobody having
+  -- answered anything.  Announcing on the first frame we see one turns that
+  -- blip into a banner about a prompt the launcher will not be showing by the
+  -- time the player goes to look for it.  A real conflict is waiting on a
+  -- human and will still be here in HOLD_GRACE seconds; a blip will not.
+  local function tellHeld(why, game)
+    -- A transfer is seconds and clears itself: nothing to say, and it is not
+    -- the condition the grace below is timing.
+    if why == "transfer" then
+      state.heldSince = nil
+      return
+    end
+    -- nil is syncSettled inside its own SYNC_RETRY backoff -- no fresh reading
+    -- either way, so the running grace stands rather than restarting.
     if why ~= "conflict" or state.heldTold then return end
+    state.heldSince = state.heldSince or state.clock
+    if state.clock - state.heldSince < HOLD_GRACE then return end
     state.heldTold = true
     announce(true)
-    mod.log:warn("autosave held: save sync is waiting on a conflict answer")
+    local engine = game and syncEngineOf(game)
+    local detail = engine and conflictDetail(engine)
+    if detail then
+      mod.log:warn("autosave held: save sync is waiting on an answer to %s",
+        detail)
+    else
+      mod.log:warn("autosave held: save sync is waiting on a conflict answer")
+    end
   end
 
   local function write(game)
@@ -474,7 +645,9 @@ return function(mod)
     state.syncWasBusy = false
     state.notify = 0
     state.heldTold = false
+    state.heldSince = nil
     state.held = false
+    state.healKey, state.healTries = nil, 0
     state.lastWriteAt = state.clock
   end
 
@@ -875,6 +1048,46 @@ return function(mod)
     end
   end
 
+  -- A held save in POKE BALL mode is a cross, not the word PAUSED: the ball is
+  -- a picture and its failure should be one too, in the same 8x8 slot in the
+  -- same corner, so it reads as this indicator having gone wrong rather than
+  -- as a second kind of furniture arriving.
+  --   1 outline  2 stroke
+  local CROSS = {
+    { 1, 1, 0, 0, 0, 0, 1, 1 },
+    { 1, 2, 1, 0, 0, 1, 2, 1 },
+    { 0, 1, 2, 1, 1, 2, 1, 0 },
+    { 0, 0, 1, 2, 2, 1, 0, 0 },
+    { 0, 0, 1, 2, 2, 1, 0, 0 },
+    { 0, 1, 2, 1, 1, 2, 1, 0 },
+    { 1, 2, 1, 0, 0, 1, 2, 1 },
+    { 1, 1, 0, 0, 0, 0, 1, 1 },
+  }
+  local CROSS_COLORS = {
+    { 0.09, 0.09, 0.09 },     -- the ball's own outline: same family
+    { 0.90, 0.22, 0.20 },     -- a shade off the shell red: this is not a ball
+  }
+  -- It blinks instead of wobbling.  Hard on/off on a fixed period, the way the
+  -- hardware blinks anything, and the off half dims rather than disappears --
+  -- a shape that vanishes outright for 200ms reads as a dropped frame.
+  local BLINK_PERIOD = 0.4
+  local BLINK_DIM = 0.28
+
+  local function drawCross(g, elapsed, alpha)
+    local on = (elapsed % BLINK_PERIOD) < BLINK_PERIOD / 2
+    local a = alpha * (on and 1 or BLINK_DIM)
+    for row = 1, BALL_SIZE do
+      for col = 1, BALL_SIZE do
+        local value = CROSS[row][col]
+        if value ~= 0 then
+          local color = CROSS_COLORS[value]
+          g.setColor(color[1], color[2], color[3], a)
+          g.rectangle("fill", col - 1, row - 1, 1, 1)
+        end
+      end
+    end
+  end
+
   -- Is the mobile FAITHFUL RATIO lock on?  This is the whole question behind
   -- where a corner badge belongs, and the engine answers it exactly this way
   -- in four places of its own (Renderer:endFrame's screen veil, the battle
@@ -903,8 +1116,8 @@ return function(mod)
     local g = love and love.graphics
     local Font = mod.ui and mod.ui.Font
     if not (g and viewport) then return end
-    -- a held notice is text even in ball mode, so the font matters there too
-    if not Font and (mode ~= "ball" or state.held) then return end
+    -- ball mode draws both of its states, held included, so it needs no font
+    if not Font and mode ~= "ball" then return end
 
     local gx, gy = viewport.gameX or 0, viewport.gameY or 0
     local gw, gh = viewport.gameWidth or 0, viewport.gameHeight or 0
@@ -949,8 +1162,10 @@ return function(mod)
     if not sy or sy <= 0 then sy = sx end
 
     -- The ball is its own little panel: sprite-sized, top right, and it fades
-    -- on the way out instead of blinking off.
-    if mode == "ball" and not state.held then
+    -- on the way out instead of blinking off.  The held cross shares the slot
+    -- exactly -- same size, same corner, same fade -- so the two never move
+    -- the indicator around between them.
+    if mode == "ball" then
       local elapsed = NOTIFY_TIME - state.notify
       local alpha = 1
       if state.notify < FADE_TIME then alpha = state.notify / FADE_TIME end
@@ -961,7 +1176,11 @@ return function(mod)
       g.push("all")
       g.translate(bx, by)
       g.scale(sx, sy)
-      drawBall(g, elapsed, alpha)
+      if state.held then
+        drawCross(g, elapsed, alpha)
+      else
+        drawBall(g, elapsed, alpha)
+      end
       g.pop()
       return
     end
@@ -1064,10 +1283,19 @@ return function(mod)
     if not overworldIdle(game) then return end
     local settled, why = syncSettled(game)
     if not settled then
-      tellHeld(why)
+      -- A conflict against our own lost upload is answerable here and now, and
+      -- answering it is the difference between a save landing and a badge
+      -- about a launcher screen that may not even be showing it yet.
+      if why == "conflict" then
+        local engine = syncEngineOf(game)
+        if engine and healSelfConflict(engine) then return end
+      end
+      tellHeld(why, game)
       return
     end
     state.heldTold = false
+    state.heldSince = nil
+    state.healKey, state.healTries = nil, 0
 
     write(game)
   end)

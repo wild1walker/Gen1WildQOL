@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.0
+
+Follows [Gen1AutoSave](https://github.com/wild1walker/Gen1AutoSave) to **1.4.0**
+(from 1.3.4). Everything else is already on its newest release.
+
+It brings one new row, which appears under `AUTO SAVE` on its own — the bundle
+reads each feature's schema at load, so an upstream that adds an option needs
+no change here:
+
+| Row | Ships |
+|---|---|
+| `HEAL CONFLICTS` | on |
+
+No option key was renamed or removed, and `enabled` — the row this bundle uses
+as AUTO SAVE's master switch — is still honoured, so the switch keeps working.
+
+### Fixed
+
+- CI ran each vendored mod's own test suite from the wrong directory. Several
+  reach their subject with a relative `loadfile("../main.lua")`, so they failed
+  on a nil call wherever else they were invoked from, and the step reported
+  warnings that said nothing about the mod. Gen1AutoSave's five all pass from
+  their own directory.
+
 ## 1.1.0
 
 ### Fixed
