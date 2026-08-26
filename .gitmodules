@@ -1,0 +1,24 @@
+[submodule "upstream/Gen1Sprint"]
+	path = upstream/Gen1Sprint
+	url = https://github.com/wild1walker/Gen1Sprint
+[submodule "upstream/Gen1AutoSave"]
+	path = upstream/Gen1AutoSave
+	url = https://github.com/wild1walker/Gen1AutoSave
+[submodule "upstream/Gen1AutoContinue"]
+	path = upstream/Gen1AutoContinue
+	url = https://github.com/wild1walker/Gen1AutoContinue
+[submodule "upstream/Gen1SoundQOL"]
+	path = upstream/Gen1SoundQOL
+	url = https://github.com/wild1walker/Gen1SoundQOL
+[submodule "upstream/Gen1Follower"]
+	path = upstream/Gen1Follower
+	url = https://github.com/wild1walker/Gen1Follower
+[submodule "upstream/Gen151"]
+	path = upstream/Gen151
+	url = https://github.com/wild1walker/Gen151
+[submodule "upstream/ExpShare"]
+	path = upstream/ExpShare
+	url = https://github.com/ShaneMcGovernIE/exp_share
+[submodule "upstream/QualityOfLife"]
+	path = upstream/QualityOfLife
+	url = https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol

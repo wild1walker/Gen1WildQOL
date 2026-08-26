@@ -1,0 +1,35 @@
+{
+  "id": "gen1_wild_qol",
+  "name": "Gen1WildQOL",
+  "version": "1.0.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "category": "QOL",
+  "game_version": ">=0.1.37 <2.0.0",
+  "priority": 100,
+  "dependencies": [],
+  "optional_dependencies": [
+    "gen1_wild_ui",
+    "CRYSTAL_251",
+    "DRAMATIC_SHAPE",
+    "unique_menu_icons"
+  ],
+  "conflicts": [
+    "gen1_sprint",
+    "gen1autosave",
+    "gen1_auto_continue",
+    "gen1_sound_qol",
+    "Gen1Follower",
+    "gen151",
+    "exp_share",
+    "quality_of_life",
+    "recomp-autosave"
+  ],
+  "incompatible": [],
+  "games": ["all"],
+  "experimental": false,
+  "permissions": ["engine_internals"],
+  "github": "wild1walker/Gen1WildQOL",
+  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound fixes, followers, all 151 catchable, EXP share and later-generation conveniences. Every feature switches on and off by itself."
+}

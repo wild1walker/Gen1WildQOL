@@ -1,0 +1,61 @@
+-- Sharing metadata read by tooling and the mod manager's detail pane; never
+-- by the loader's merge.
+return {
+  summary = "The quality-of-life half of the Gen1Wild suite in one mod: "
+    .. "sprinting, autosave, auto continue, sound fixes, followers, all 151 "
+    .. "catchable, EXP share and later-generation conveniences. Every "
+    .. "feature switches on and off by itself.",
+  author = "wild1walker",
+  contact = "https://github.com/wild1walker/Gen1WildQOL",
+  tags = { "quality-of-life", "bundle", "sprint", "autosave", "followers",
+    "exp-share", "collection" },
+  differences = {
+    added = {
+      "a GEN1WILD QOL row on the OPTION screen: one row per feature, "
+        .. "switched on or off there, with that feature's own settings one "
+        .. "press of A away",
+      "eleven features drawn from eight mods, each of which remains its own "
+        .. "repository and is pinned here as a submodule",
+    },
+    changed = {
+      "EXP SHARE ships as GEN 5+ rather than OFF -- the fighters keep their "
+        .. "full experience and every living bench Pokemon gains half a "
+        .. "fighter's share. Seeded once on a save that has never carried "
+        .. "the setting; a stored choice is never overwritten",
+      "the area banner is a plaque sized to the name it carries, anchored "
+        .. "top-left and sliding in from that edge, rather than the "
+        .. "dialogue box's full-width geometry flush with the bottom of the "
+        .. "screen. POSITION: BOTTOM restores the original placement",
+      "the four Quality of Life features are four separate rows rather than "
+        .. "one submenu, because they have nothing to do with each other",
+      "EXP SHARE is configured in this bundle's menu rather than on the "
+        .. "engine's OPTIONS screen, so every feature here has one home",
+    },
+    known = {
+      "a feature whose upstream mod has no off switch of its own -- SOUND, "
+        .. "FOLLOWERS, EXP SHARE and three of the four Quality of Life "
+        .. "features -- is gated at load, so switching it takes effect on "
+        .. "the next launch. The menu marks those rows with an asterisk and "
+        .. "says so in the footer. The rest are live",
+      "installing this alongside any of the eight mods it is built from is "
+        .. "a conflict, and the manifest declares it: they would both "
+        .. "install the same hooks",
+      "settings are stored under this bundle's id, not the individual "
+        .. "mods', so moving from the standalone mods to the bundle starts "
+        .. "them at their defaults",
+    },
+  },
+  credits = {
+    { who = "unxpected-uxp", for_ = "the Quality of Life mod: the XP bar, "
+      .. "the caught marker, easy interactions and the location banner this "
+      .. "one redraws" },
+    { who = "ShaneMcGovernIE", for_ = "exp_share, carried whole" },
+    { who = "Antigravity, gamecorner33 and the PokePC Followers lineage",
+      for_ = "the follower work Gen1Follower is built from" },
+    { who = "Wowabox (Darklinkduck)", for_ = "All Pokemon Catchable 151, "
+      .. "which got to a complete Kanto dex in one save first" },
+    { who = "Gen1Recomp", for_ = "the mod API every one of these is built on" },
+    { who = "pret", for_ = "the disassemblies underneath all of it" },
+  },
+  compat = { engine = ">=0.1.37 <2.0.0", modApi = 2 },
+}
