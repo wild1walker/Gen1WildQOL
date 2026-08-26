@@ -140,6 +140,26 @@ return {
       aliases = { "Gen151", "gen151" },
     },
 
+    {
+      id = "remember",
+      priority = 1200,
+      dir = "Gen1Remember",
+      entry = "main.lua",
+      label = "REMEMBER MOVES",
+      description = "TEACH A POKEMON A MOVE IT HAS FORGOTTEN, FROM THE POPUP YOU ALREADY OPEN ON IT.",
+      -- No master row of its own to donate: PARTY REMEMBER and BOX REMEMBER
+      -- are two surfaces, not a switch for the mod. So the bundle
+      -- synthesizes one, gates installation with it, and the menu marks the
+      -- row as needing a relaunch.
+      default = true,
+      -- It asks for Gen1BillsBox to hang its row in the box popup too, and
+      -- Gen1BillsBox lives in the other half. That lookup crosses the split
+      -- through runtime/registry.lua, which is also why the handle it gets
+      -- back has to be shaped like the engine's -- the mod reads
+      -- `box.exports.actions`.
+      aliases = { "Gen1Remember" },
+    },
+
     -- ---- the furniture
     --
     -- These two are in Gen1WildUI as well, and deliberately.  They are not

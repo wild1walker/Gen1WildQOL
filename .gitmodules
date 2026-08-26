@@ -22,3 +22,6 @@
 [submodule "upstream/Gen1ModMenu"]
 	path = upstream/Gen1ModMenu
 	url = https://github.com/wild1walker/Gen1ModMenu
+[submodule "upstream/Gen1Remember"]
+	path = upstream/Gen1Remember
+	url = https://github.com/wild1walker/Gen1Remember

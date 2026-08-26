@@ -1,10 +1,10 @@
 # Gen1WildQOL
 
 **The quality-of-life half of the [Gen1Wild](https://github.com/wild1walker/Gen1Wild)
-suite, as one mod.** Thirteen features from ten sources. Eight are still their
-own mods with their own releases, tracked here and not forked. Two —
-`EXP SHARE` and the four later-generation conveniences — began as other
-people's mods and are maintained in this repository now.
+suite, as one mod.** Thirteen features from eleven sources. Nine are still
+their own mods with their own releases, tracked here and not forked; `EXP SHARE`
+and the three later-generation conveniences began as other people's mods and are
+maintained in this repository now.
 
 Its other half is [Gen1WildUI](https://github.com/wild1walker/Gen1WildUI),
 which carries the visual overhauls. The two know about each other: a feature in
@@ -27,6 +27,7 @@ itself. Nothing is all-or-nothing.
 | **CAUGHT MARKER** | on | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
 | **AREA BANNER** | on, 3s | Quality of Life ‡ |
 | **EASY HM USE** | on | Quality of Life ‡ |
+| **REMEMBER MOVES** | on | [Gen1Remember](https://github.com/wild1walker/Gen1Remember) |
 | **MENU LAYOUT** † | on | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) |
 | **MOD MANAGER** † | on | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) |
 
@@ -147,7 +148,7 @@ Source lives in one of two places, and which one says who looks after it:
 the game reads. `tools/check.py` fails if a feature is in both, in neither, or
 declared as one and sitting in the other.
 
-For the tracked eight:
+For the tracked nine:
 
 ```sh
 git submodule update --init --recursive   # first time

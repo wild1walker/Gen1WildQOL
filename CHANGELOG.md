@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.4.0
+
+Adds **REMEMBER MOVES**, from
+[Gen1Remember](https://github.com/wild1walker/Gen1Remember) — teach a Pokémon a
+move it has forgotten, from the popup you already open on it. Tracked as a
+submodule pinned to 1.0.0. It ships on, and `Gen1Remember` joins the manifest's
+conflicts, so the bundle and the standalone are mutually exclusive.
+
+| Row | Ships |
+|---|---|
+| `PARTY REMEMBER` | on |
+| `BOX REMEMBER` | on |
+| `PRE-EVO MOVES` | on |
+| `HIDE WHEN EMPTY` | on |
+
+`REMEMBER MOVES` takes a relaunch to switch: `PARTY REMEMBER` and `BOX REMEMBER`
+are two surfaces rather than a switch for the mod, so there is no row to donate
+as its master and the bundle gates it at load.
+
+`BOX REMEMBER` hangs its row in Gen1BillsBox's popup, and Gen1BillsBox lives in
+[Gen1WildUI](https://github.com/wild1walker/Gen1WildUI). That lookup crosses the
+split, and needs Gen1WildUI 1.3.0 or newer — the version whose Gen1BillsBox
+publishes the provider registry. Without it the party row still works.
+
+### Fixed
+
+- **`mod.find` handed back the wrong shape, and cross-mod integrations went
+  quietly dead.** The engine's own returns a handle — `{ id, version, exports }`
+  — and mods read it that way. The bundle's registry answered with the exports
+  table itself, so `dex.exports` was nil and the integration simply did nothing
+  rather than failing. Gen151's Pokédex catch hints had never registered inside
+  this bundle. Handles now match the engine's, `tools/build.py` writes the
+  version map they carry, and the shape is pinned by a test.
+
 ## 1.3.0
 
 **`BATTLE XP BAR` has moved out of this bundle.** It is `XP BAR` in
