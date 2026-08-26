@@ -443,6 +443,89 @@ do
   eq(optionset.enabled(mod, "sprint"), false, "enabled() agrees")
 end
 
+-- ------------------------------------------- raw keys written by the manager
+
+do
+  io.write("rows the mod manager writes unprefixed are read and written both ways\n")
+  local mod = fakeMod()
+  local optionset = OptionSet.new()
+  local modmenu = { id = "modmenu", label = "MOD MENU", dir = "Gen1ModMenu",
+                    raw_option_keys = { "sort", "hide_disabled" } }
+  optionset.master(modmenu)
+  optionset.adopt(modmenu, {
+    { key = "sort", type = "choice", label = "SORT", default = "name",
+      choices = { { "NAME", "name" }, { "CATEGORY", "category" } } },
+    { key = "hide_disabled", type = "toggle", label = "HIDE OFF", default = false },
+    { key = "help_line", type = "toggle", label = "HELP LINE", default = true },
+  })
+
+  local game = { save = { options = { modOptions = {} } } }
+  function game:writeOptions() end
+  optionset.resolveGame = function() return game end
+
+  -- Gen1ModMenu reaching the engine's manager: an unprefixed write.
+  game.save.options.modOptions[mod.id] = { sort = "category" }
+  eq(optionset.read(mod, "modmenu_sort"), "category",
+     "a value written unprefixed by the manager is still read")
+
+  -- The bundle menu writing the same row: both spellings move together.
+  optionset.write(mod, "modmenu_sort", "name", game)
+  local bucket = game.save.options.modOptions[mod.id]
+  eq(bucket["modmenu_sort"], "name", "the prefixed spelling is written")
+  eq(bucket["sort"], "name", "and so is the raw one the manager will read")
+
+  -- A row not on the list gets no raw fallback, which is the point: five of
+  -- these mods call a row `enabled` and must never see each other's.
+  game.save.options.modOptions[mod.id]["help_line"] = false
+  eq(optionset.read(mod, "modmenu_help_line"), true,
+     "a row outside the list ignores the raw spelling entirely")
+end
+
+-- ------------------------------------------------- install order vs menu order
+
+do
+  io.write("features install by priority and are listed in declaration order\n")
+
+  -- Reproduce the sort bundle.lua does, from the same inputs, so the ordering
+  -- rule is pinned by a test rather than only by a comment.  Declaration
+  -- order here is the menu's; priority is each mod's own manifest value.
+  local declared = {
+    { id = "dex",      priority = 1100 },
+    { id = "box",      priority = 1100 },
+    { id = "party",    priority = 1100 },
+    { id = "arena",    priority = 50 },
+    { id = "modmenu",  priority = 500 },
+    { id = "bag",      priority = 520 },
+    { id = "menus",    priority = 900 },
+  }
+
+  local ordered = {}
+  for index, feature in ipairs(declared) do
+    ordered[#ordered + 1] = { feature = feature, index = index }
+  end
+  table.sort(ordered, function(a, b)
+    local pa = a.feature.priority or 100
+    local pb = b.feature.priority or 100
+    if pa ~= pb then return pa < pb end
+    return a.index < b.index
+  end)
+
+  local names = {}
+  for i, entry in ipairs(ordered) do names[i] = entry.feature.id end
+  eq(table.concat(names, ","), "arena,modmenu,bag,menus,dex,box,party",
+     "installation ascends by the upstream manifest priority")
+
+  -- The tie is what keeps Gen1Party working: it optionally reads Gen1Dex and
+  -- Gen1BillsBox, so both must be registered before it.
+  local position = {}
+  for i, name in ipairs(names) do position[name] = i end
+  ok(position.dex < position.party, "Gen1Dex installs before Gen1Party")
+  ok(position.box < position.party, "Gen1BillsBox installs before Gen1Party")
+
+  -- And the menu is unaffected: it reads the declared list.
+  eq(declared[1].id, "dex", "the menu still lists features as declared")
+end
+
 -- ------------------------------------------------------------------ done
 
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))

@@ -21,6 +21,11 @@
 --   defaults     bundle-level overrides for any upstream row's default
 --   aliases      every name a sibling might call this feature by, for
 --                mod.find
+--   priority     the upstream manifest's own load priority.  Features install
+--                in ascending priority, ties in declaration order -- which is
+--                the order these mods were built and tested against.  It is
+--                deliberately independent of the order they are written here,
+--                which is the order the menu reads them in.
 --   adapter      a file under adapters/, run after the feature installs
 --   suppress_hooks  engine hooks the feature must not register, because the
 --                bundle surfaces that setting itself
@@ -41,6 +46,7 @@ return {
 
     {
       id = "sprint",
+      priority = 100,
       dir = "Gen1Sprint",
       entry = "main.lua",
       label = "SPRINT",
@@ -54,6 +60,7 @@ return {
 
     {
       id = "autosave",
+      priority = 50,
       dir = "Gen1AutoSave",
       entry = "main.lua",
       label = "AUTO SAVE",
@@ -65,6 +72,7 @@ return {
 
     {
       id = "autocontinue",
+      priority = 100,
       dir = "Gen1AutoContinue",
       entry = "main.lua",
       label = "AUTO CONTINUE",
@@ -78,6 +86,7 @@ return {
 
     {
       id = "sound",
+      priority = 100,
       dir = "Gen1SoundQOL",
       entry = "main.lua",
       label = "SOUND",
@@ -93,6 +102,7 @@ return {
 
     {
       id = "follower",
+      priority = 100,
       dir = "Gen1Follower",
       entry = "main_sandbox.lua",
       label = "FOLLOWERS",
@@ -110,6 +120,7 @@ return {
 
     {
       id = "gen151",
+      priority = 900,
       dir = "Gen151",
       entry = "main.lua",
       label = "ALL 151",
@@ -129,6 +140,7 @@ return {
 
     {
       id = "expshare",
+      priority = 100,
       dir = "ExpShare",
       entry = "main.lua",
       label = "EXP SHARE",
@@ -148,6 +160,7 @@ return {
 
     {
       id = "xpbar",
+      priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_xp_bar.lua",
       label = "BATTLE XP BAR",
@@ -159,6 +172,7 @@ return {
 
     {
       id = "caught",
+      priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_caught_indicator.lua",
       label = "CAUGHT MARKER",
@@ -169,6 +183,7 @@ return {
 
     {
       id = "banners",
+      priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_location_banners.lua",
       label = "AREA BANNER",
@@ -183,6 +198,7 @@ return {
 
     {
       id = "interact",
+      priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_easy_interactions.lua",
       label = "EASY HM USE",

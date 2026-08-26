@@ -56,6 +56,10 @@ function OptionSet.new()
     groups = {},      -- feature id -> { feature, rows = { prefixed row, ... } }
     order = {},       -- feature ids, in registration order
     resolveGame = nil,-- set by the bundle; the live game, when there is one
+    -- prefixed key -> unprefixed key, for the handful of rows a feature
+    -- writes through the engine's own mod manager rather than through
+    -- mod.options.  See `raw_option_keys` in adopt().
+    rawFallback = {},
   }
 
   function self.prefixed(featureId, key)
@@ -106,6 +110,8 @@ function OptionSet.new()
     if type(schema) ~= "table" then return end
     local g = group(feature)
     local overrides = feature.defaults or {}
+    local rawKeys = {}
+    for _, key in ipairs(feature.raw_option_keys or {}) do rawKeys[key] = true end
 
     for _, incoming in ipairs(schema) do
       if type(incoming) == "table" and type(incoming.key) == "string" then
@@ -117,6 +123,19 @@ function OptionSet.new()
         -- ships enabled inside the bundle while its own repo ships it off,
         -- without carrying a patch against upstream source.
         if overrides[raw] ~= nil then row.default = overrides[raw] end
+
+        -- Gen1ModMenu is the mod manager, and sets three of its own rows by
+        -- calling the manager's `setOption(modId, key, value)` -- which
+        -- writes the *unprefixed* key into the bundle's bucket, because the
+        -- manager has no idea this mod is one of twelve.  Left alone, those
+        -- three rows would be written in one place and read from another.
+        --
+        -- Naming them here makes the runtime read both spellings and write
+        -- both, so it does not matter which path set a value.  It is
+        -- deliberately a per-feature opt-in list rather than a blanket raw
+        -- fallback: a blanket one would undo the prefixing entirely for the
+        -- five mods that all call a row `enabled`.
+        if rawKeys[raw] then self.rawFallback[row.key] = raw end
 
         -- `visible_if = { key = "enabled", equals = true }` means *this
         -- feature's* enabled, always.
@@ -203,6 +222,17 @@ function OptionSet.new()
       value = mod.options:get(key)
     end
 
+    local raw = self.rawFallback[key]
+    if value == nil and raw then
+      if type(options) == "table" and type(options.modOptions) == "table" then
+        local bucket = options.modOptions[mod.id]
+        if type(bucket) == "table" then value = bucket[raw] end
+      end
+      if value == nil and mod.options and type(mod.options.get) == "function" then
+        value = mod.options:get(raw)
+      end
+    end
+
     if not row then return value end
     if value == nil or not legal(row, value) then return row.default end
     if row.type == "number" then
@@ -219,14 +249,19 @@ function OptionSet.new()
   function self.write(mod, key, value, game)
     game = game or liveGame()
     local options = game and game.save and game.save.options
+    local raw = self.rawFallback[key]
     local bucket = bucketOf(options, mod.id)
-    if bucket then bucket[key] = value end
+    if bucket then
+      bucket[key] = value
+      if raw then bucket[raw] = value end
+    end
     if game and type(game.mods) == "table" then
       local mirror = bucketOf(game.mods, mod.id)
       if mirror then mirror[key] = value end
     end
     if mod.options and type(mod.options.set) == "function" then
       pcall(function() mod.options:set(key, value) end)
+      if raw then pcall(function() mod.options:set(raw, value) end) end
     end
     if game then
       -- Gen 1's Game spells this writeOptions; Gold's Game2 spells it
