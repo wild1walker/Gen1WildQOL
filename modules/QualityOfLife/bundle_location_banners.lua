@@ -1,13 +1,13 @@
 -- AREA BANNER -- the name of the place you have just walked into.
 --
--- Derived from the LOCATION BANNERS feature of unxpected-uxp's Quality of Life
--- mod (qol_feature_location_banners.lua), which is vendored beside this file
--- and left untouched.  The map-watching, the name resolution and both draw
--- seams are upstream's and are reproduced faithfully.  What is rewritten here
--- is what the banner looks like, which is the reason this file exists rather
--- than a two-line shim.
+-- Descended from the LOCATION BANNERS feature of unxpected-uxp's Quality of
+-- Life mod.  The map-watching, the name resolution and both draw seams are
+-- theirs and are reproduced faithfully; what is rewritten here is what the
+-- banner looks like, which is the reason this file exists at all.  It replaced
+-- their qol_feature_location_banners.lua outright, so that file is no longer
+-- carried.
 --
--- Upstream draws `Font.drawBox(0, 14, 20, 4)`: twenty tiles wide, four tall,
+-- The original drew `Font.drawBox(0, 14, 20, 4)`: twenty tiles wide, four tall,
 -- flush with the bottom of the screen.  That is the exact geometry of the
 -- game's dialogue box, so a one-word area name arrives looking like somebody
 -- started a conversation and thought better of it -- a full-width frame,

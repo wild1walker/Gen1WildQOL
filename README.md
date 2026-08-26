@@ -1,9 +1,10 @@
 # Gen1WildQOL
 
 **The quality-of-life half of the [Gen1Wild](https://github.com/wild1walker/Gen1Wild)
-suite, as one mod.** Thirteen features from ten repositories, each of which is
-still its own mod with its own releases — this bundles them, it does not fork
-them.
+suite, as one mod.** Thirteen features from ten sources. Eight are still their
+own mods with their own releases, tracked here and not forked. Two —
+`EXP SHARE` and the four later-generation conveniences — began as other
+people's mods and are maintained in this repository now.
 
 Its other half is [Gen1WildUI](https://github.com/wild1walker/Gen1WildUI),
 which carries the visual overhauls. The two know about each other: a feature in
@@ -22,11 +23,11 @@ itself. Nothing is all-or-nothing.
 | **SOUND** | on | [Gen1SoundQOL](https://github.com/wild1walker/Gen1SoundQOL) |
 | **FOLLOWERS** | on | [Gen1Follower](https://github.com/wild1walker/Gen1Follower) |
 | **ALL 151** | on | [Gen151](https://github.com/wild1walker/Gen151) |
-| **EXP SHARE** | on, **GEN 5+** | [exp_share](https://github.com/ShaneMcGovernIE/exp_share) |
-| **BATTLE XP BAR** | off | [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) |
-| **CAUGHT MARKER** | off | Quality of Life |
-| **AREA BANNER** | off | Quality of Life |
-| **EASY HM USE** | off | Quality of Life |
+| **EXP SHARE** | on, **GEN 5+** | originally [exp_share](https://github.com/ShaneMcGovernIE/exp_share) ‡ |
+| **BATTLE XP BAR** | off | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
+| **CAUGHT MARKER** | off | Quality of Life ‡ |
+| **AREA BANNER** | off | Quality of Life ‡ |
+| **EASY HM USE** | off | Quality of Life ‡ |
 | **MENU LAYOUT** † | on | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) |
 | **MOD MANAGER** † | on | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) |
 
@@ -35,6 +36,11 @@ not really quality-of-life or visual — they are the furniture everything else
 is reached through — so both halves carry them and neither loses them. Install
 both bundles and exactly one of them sets it up; see
 [Features in both bundles](#features-in-both-bundles).
+
+‡ Maintained in this repository rather than tracked. The source is under
+`maintained/`, edits go straight in, and nothing syncs it from anywhere. The
+credit for what it does still belongs to the people named in
+[Credits](#credits).
 
 ## The menu
 
@@ -124,8 +130,18 @@ not carry over: they are stored under this bundle's id.
 
 ## How it stays up to date
 
-Each feature is a git submodule under `upstream/`, pinned to a release. Nothing
-is forked and nothing is hand-copied.
+Source lives in one of two places, and which one says who looks after it:
+
+| | |
+|---|---|
+| `upstream/<Repo>/` | A submodule pinned to a release. Somebody else's mod, tracked, never edited here. |
+| `maintained/<Dir>/` | Source this repository looks after itself. Edited here; nothing syncs it. |
+
+`tools/build.py` copies from whichever applies into `modules/`, which is what
+the game reads. `tools/check.py` fails if a feature is in both, in neither, or
+declared as one and sitting in the other.
+
+For the tracked eight:
 
 ```sh
 git submodule update --init --recursive   # first time
@@ -134,8 +150,10 @@ python3 tools/sync.py Gen1Sprint          # or just one
 python3 tools/sync.py --dry-run           # report, change nothing
 ```
 
-`sync.py` moves the pins and rebuilds `modules/`, which is what the game reads.
-Then look at the diff and commit it:
+`sync.py` moves the pins and rebuilds `modules/`. It never touches
+`maintained/` — there is nothing to sync it from — and lists those at the end
+of a run so a short report is not a surprise. Then look at the diff and commit
+it:
 
 ```sh
 git diff --stat modules upstream
@@ -162,8 +180,8 @@ runtime/              how a bundle hosts a mod written to be standalone
   menu.lua              the OPTION screens
   bundle.lua            the order all of the above happens in
 adapters/             per-feature bundle glue, run after a feature installs
-overlays/<Dir>/       this bundle's own files, laid over an upstream's
-upstream/<Repo>/      submodules; the source of truth, never edited here
+upstream/<Repo>/      submodules; tracked, never edited here
+maintained/<Dir>/     source this repository looks after itself
 modules/<Dir>/        built by tools/build.py; what the game loads
 tools/                build.py, sync.py, check.py
 tests/                headless coverage of the runtime seam
@@ -215,13 +233,17 @@ luajit tests/runtime_test.lua
 
 ## Credits
 
-Everything here is somebody's work, and mostly not mine:
+Everything here is somebody's work, and mostly not mine. Two of these are
+maintained in this repository now rather than tracked upstream — that changes
+who looks after the code, not who wrote it:
 
 - **[unxpected-uxp](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol)**
   — the XP bar, the caught marker, easy interactions, and the location banner
-  this bundle redraws.
+  this bundle redraws. `BATTLE XP BAR`, `CAUGHT MARKER`, `AREA BANNER` and
+  `EASY HM USE` descend from their work.
 - **[ShaneMcGovernIE](https://github.com/ShaneMcGovernIE/exp_share)** —
-  exp_share, carried whole.
+  exp_share, essentially whole. `EXP SHARE` is their mod with a different
+  default and a different menu around it.
 - **Antigravity, gamecorner33** and the PokéPC / Followers EX lineage, whose
   Gen II sheets descend from **ShockSlayer** and the **Pokémon Crystal Clear**
   team — the follower work `Gen1Follower` is built from.
@@ -231,7 +253,8 @@ Everything here is somebody's work, and mostly not mine:
   **[pret](https://github.com/pret)** — the engine and the disassemblies all of
   it stands on.
 
-Each vendored mod keeps its own licence file under `modules/<Feature>/`.
+Each tracked mod keeps its own licence file under `modules/<Feature>/`.
 
-Contributions belong in the mod's own repository, behind its link above. Fixes
-to the bundling itself belong here.
+Contributions to a **tracked** feature belong in that mod's own repository,
+behind its link above. Contributions to a **maintained** one, and fixes to the
+bundling itself, belong here.

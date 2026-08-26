@@ -14,8 +14,12 @@ return {
       "a GEN1WILD QOL row on the OPTION screen: one row per feature, "
         .. "switched on or off there, with that feature's own settings one "
         .. "press of A away",
-      "thirteen features drawn from ten mods, each of which remains its own "
-        .. "repository and is pinned here as a submodule",
+      "thirteen features drawn from ten sources. Eight remain their own "
+        .. "repositories and are pinned here as submodules; EXP SHARE and "
+        .. "the four later-generation conveniences began as other people's "
+        .. "mods and are maintained in this repository now, which changes "
+        .. "who looks after the code and not who wrote it -- the credits "
+        .. "below stand either way",
       "MENU LAYOUT and MOD MANAGER, which Gen1WildUI also carries. They "
         .. "are the furniture every other feature is reached through, so "
         .. "neither half goes without them. With both bundles installed the "
@@ -59,8 +63,10 @@ return {
   credits = {
     { who = "unxpected-uxp", for_ = "the Quality of Life mod: the XP bar, "
       .. "the caught marker, easy interactions and the location banner this "
-      .. "one redraws" },
-    { who = "ShaneMcGovernIE", for_ = "exp_share, carried whole" },
+      .. "one redraws. Maintained here now, theirs by origin" },
+    { who = "ShaneMcGovernIE", for_ = "exp_share, essentially whole -- a "
+      .. "different default and a different menu around it. Maintained here "
+      .. "now, theirs by origin" },
     { who = "Antigravity, gamecorner33 and the PokePC Followers lineage",
       for_ = "the follower work Gen1Follower is built from" },
     { who = "Wowabox (Darklinkduck)", for_ = "All Pokemon Catchable 151, "

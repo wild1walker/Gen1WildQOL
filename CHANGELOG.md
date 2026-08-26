@@ -18,13 +18,17 @@ itself, with its own settings one press of A away:
 | SOUND | [Gen1SoundQOL](https://github.com/wild1walker/Gen1SoundQOL) | on |
 | FOLLOWERS | [Gen1Follower](https://github.com/wild1walker/Gen1Follower) | on |
 | ALL 151 | [Gen151](https://github.com/wild1walker/Gen151) | on |
-| EXP SHARE | [exp_share](https://github.com/ShaneMcGovernIE/exp_share) | on, GEN 5+ |
-| BATTLE XP BAR | [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) | off |
-| CAUGHT MARKER | Quality of Life | off |
-| AREA BANNER | Quality of Life | off |
-| EASY HM USE | Quality of Life | off |
+| EXP SHARE ‡ | originally [exp_share](https://github.com/ShaneMcGovernIE/exp_share) | on, GEN 5+ |
+| BATTLE XP BAR ‡ | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) | off |
+| CAUGHT MARKER ‡ | Quality of Life | off |
+| AREA BANNER ‡ | Quality of Life | off |
+| EASY HM USE ‡ | Quality of Life | off |
 | MENU LAYOUT † | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) | on |
 | MOD MANAGER † | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) | on |
+
+‡ Maintained in this repository rather than tracked upstream: the source is
+under `maintained/` and edits go straight in. The credit for what these do
+still belongs to their original authors, named in the README.
 
 † Carried by Gen1WildUI as well. With both bundles installed exactly one sets
 it up, and its settings live under a shared id so they do not move when the

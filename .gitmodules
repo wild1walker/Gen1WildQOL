@@ -16,12 +16,6 @@
 [submodule "upstream/Gen151"]
 	path = upstream/Gen151
 	url = https://github.com/wild1walker/Gen151
-[submodule "upstream/ExpShare"]
-	path = upstream/ExpShare
-	url = https://github.com/ShaneMcGovernIE/exp_share
-[submodule "upstream/QualityOfLife"]
-	path = upstream/QualityOfLife
-	url = https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol
 [submodule "upstream/Gen1MenuManager"]
 	path = upstream/Gen1MenuManager
 	url = https://github.com/wild1walker/Gen1MenuManager

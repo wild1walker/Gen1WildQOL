@@ -32,6 +32,10 @@
 --                they do not move when the winner does.  See runtime/claims.lua.
 --   raw_option_keys  rows this feature writes by calling the engine's mod
 --                manager, which does not know about prefixes
+--   maintained   true when this repository looks after the source itself,
+--                under maintained/<dir>/ rather than as a submodule.  Nothing
+--                syncs it; edits go straight in.  It is still somebody else's
+--                work by origin, and the credits say so.
 --   adapter      a file under adapters/, run after the feature installs
 --   suppress_hooks  engine hooks the feature must not register, because the
 --                bundle surfaces that setting itself
@@ -187,11 +191,13 @@ return {
 
     -- ---- experience sharing
     --
-    -- Upstream keeps this on the engine's own OPTION screen and stores it in
-    -- the save rather than in mod options, so the bundle does not try to move
-    -- its storage -- it seeds the default and mirrors the rows into the
-    -- bundle menu, and suppresses the upstream row so the setting has one
-    -- home rather than two.
+    -- Originally ShaneMcGovernIE's exp_share, maintained here now rather than
+    -- tracked: the source is under maintained/ExpShare and edits go straight
+    -- in.  It keeps its mode on the engine's own OPTION screen and in the
+    -- save rather than in mod options, so the bundle does not try to move its
+    -- storage -- it seeds the default and mirrors the rows into the bundle
+    -- menu, and suppresses the original row so the setting has one home
+    -- rather than two.
 
     {
       id = "expshare",
@@ -202,19 +208,23 @@ return {
       description = "PARTY-WIDE EXPERIENCE: GEN 1, GEN 5+, BALANCED, AVERAGE OR A CUSTOM PERCENTAGE.",
       default = true,
       aliases = { "exp_share", "ExpShare" },
+      maintained = true,
       adapter = "expshare",
       suppress_hooks = { ["ui.options.rows"] = true },
     },
 
     -- ---- later-generation conveniences
     --
-    -- Upstream ships these four as one mod with its own submenu.  Here each is
-    -- its own row in the bundle menu, because they are unrelated to each other
-    -- and a player who wants easy HM use has no particular reason to want an
-    -- XP bar.
+    -- Originally unxpected-uxp's Quality of Life mod, maintained here now
+    -- rather than tracked: the source is under maintained/QualityOfLife and
+    -- edits go straight in.  It shipped these four as one mod behind one
+    -- submenu; here each is its own row, because they are unrelated to each
+    -- other and a player who wants easy HM use has no particular reason to
+    -- want an XP bar.
 
     {
       id = "xpbar",
+      maintained = true,
       priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_xp_bar.lua",
@@ -227,6 +237,7 @@ return {
 
     {
       id = "caught",
+      maintained = true,
       priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_caught_indicator.lua",
@@ -238,6 +249,7 @@ return {
 
     {
       id = "banners",
+      maintained = true,
       priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_location_banners.lua",
@@ -253,6 +265,7 @@ return {
 
     {
       id = "interact",
+      maintained = true,
       priority = 100,
       dir = "QualityOfLife",
       entry = "bundle_easy_interactions.lua",

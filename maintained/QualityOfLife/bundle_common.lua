@@ -6,11 +6,10 @@
 -- do with each other: wanting easy HM use is no reason to want an XP bar, and
 -- the whole point of the bundle menu is that you switch on the parts you want.
 --
--- Splitting them means supplying by hand the two things upstream's own
--- main.lua supplied: the `generation` probe, and a `services.options.value`
--- the feature files call to read their rows.  Both are small, and doing it
--- this way leaves every upstream feature file untouched -- they are vendored
--- exactly as published and re-read on every sync.
+-- Splitting them means supplying by hand the two things the original main.lua
+-- supplied: the `generation` probe, and a `services.options.value` the feature
+-- files call to read their rows.  Both are small, and doing it this way leaves
+-- the feature files themselves alone.
 
 local Common = {}
 
@@ -90,10 +89,10 @@ end
 -- `not battle.enemy.fainted`. The XP bar draws over the *player* HUD and has
 -- no matching predicate. This is that predicate.
 --
--- It is applied here rather than by editing the vendored feature file, so
--- upstream's source stays byte-identical to what it publishes and a sync
--- brings the next version in cleanly. If upstream fixes this, the guard
--- becomes a no-op rather than a conflict.
+-- It is applied here rather than inside qol_feature_xp_bar.lua because that
+-- file is still recognisably unxpected-uxp's, and keeping this repository's
+-- corrections in its own layer makes it obvious which behaviour came from
+-- where. Fold it in if that stops being useful.
 
 -- `fainted` is the flag the engine sets on a battler and the one upstream
 -- already reads for the enemy. The HP check behind it is belt and braces: it
