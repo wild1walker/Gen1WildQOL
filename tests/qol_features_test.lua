@@ -37,48 +37,18 @@ local function load_(path, ...)
   return assert(load(source, "@" .. path))(...)
 end
 
--- ------------------------------------------------- the fainted XP bar guard
+-- --------------------------------------------- the gate is the feature's alone
+--
+-- Both battle features used to draw through one overlay host, so a gate
+-- applied for one of them must not reach the other.  The XP bar was the one
+-- that needed a gate and it is Gen1BattleUI's now, which leaves this bundle
+-- with the mechanism and no user of it -- and a mechanism with no user is
+-- exactly the one that quietly stops working.  So it is still driven here,
+-- against a stand-in predicate rather than against the predicate that left.
 
 do
-  io.write("the XP bar stops drawing once the player's Pokemon faints\n")
+  io.write("a gated overlay does not gate the ones beside it\n")
 
-  local Common = load_("modules/QualityOfLife/bundle_common.lua")
-  local visible = Common.playerHudVisible
-
-  -- The ordinary case: a Pokemon that is up and fighting.
-  ok(visible({ player = { mon = { hp = 21 } } }), "a healthy player draws the bar")
-
-  -- The bug in the screenshot: RATICATE has fainted, the engine has cleared
-  -- the player HUD, and upstream's own guards are all still false -- so the
-  -- bar was drawn into the empty space where the HUD had been.
-  eq(visible({ player = { fainted = true, mon = { hp = 0 } } }), false,
-     "a fainted player does not")
-
-  -- The flag alone is enough, which is what upstream reads for the enemy.
-  eq(visible({ player = { fainted = true, mon = { hp = 21 } } }), false,
-     "the fainted flag alone is enough")
-
-  -- And zero HP alone is enough, for the frame before the flag is set.
-  eq(visible({ player = { mon = { hp = 0 } } }), false,
-     "zero HP alone is enough")
-
-  -- Nothing to draw over at all.
-  eq(visible({}), false, "no player battler at all draws nothing")
-  eq(visible(nil), false, "and neither does no battle")
-
-  -- A battler whose mon the engine has not filled in yet is not assumed dead:
-  -- the bar's own guards decide, as they did before.
-  ok(visible({ player = {} }), "a battler with no mon yet is left to upstream")
-  ok(visible({ player = { mon = {} } }), "and so is a mon with no hp field")
-end
-
-do
-  io.write("the guard is the XP bar's alone, not the shared overlay host's\n")
-
-  -- Both battle features draw through one overlay host, so a gate applied for
-  -- one of them must not reach the other: the caught marker draws over the
-  -- *enemy* HUD and is perfectly correct to keep drawing while the player is
-  -- down. It has its own enemy-side guard already.
   local Common = load_("modules/QualityOfLife/bundle_common.lua")
 
   local added = {}
@@ -87,43 +57,42 @@ do
     install = function() end,
   }
 
-  local xpDrawn, caughtDrawn = 0, 0
+  local gatedDrawn, ungatedDrawn = 0, 0
+  local allowed = true
 
-  -- The XP bar: registered through a gated view of the host.
-  do
-    -- Reproduce the gating Common.install applies, through the public
-    -- predicate, so the test exercises the real thing.
-    local gate = Common.playerHudVisible
-    local proxy = {
-      add = function(_, overlay)
-        local base = overlay.draw
-        overlay.draw = function(battle, ...)
-          if not gate(battle) then return end
-          return base(battle, ...)
-        end
-        return host:add(overlay)
-      end,
-    }
-    proxy:add({ id = "experience bar",
-                draw = function() xpDrawn = xpDrawn + 1 end })
-  end
-
-  -- The caught marker: registered straight onto the host, ungated.
-  host:add({ id = "caught marker",
-             draw = function() caughtDrawn = caughtDrawn + 1 end })
+  -- Reproduce the gating Common.install applies.  `gated` is a local, so the
+  -- shape is asserted rather than the function -- which is the same thing the
+  -- previous version of this test did through the public predicate.
+  local proxy = {
+    add = function(_, overlay)
+      local base = overlay.draw
+      overlay.draw = function(battle, ...)
+        if not allowed then return end
+        return base(battle, ...)
+      end
+      return host:add(overlay)
+    end,
+  }
+  proxy:add({ id = "gated", draw = function() gatedDrawn = gatedDrawn + 1 end })
+  host:add({ id = "ungated",
+             draw = function() ungatedDrawn = ungatedDrawn + 1 end })
 
   eq(#added, 2, "both overlays reached the shared host")
 
-  local fainted = { player = { fainted = true, mon = { hp = 0 } } }
-  for _, overlay in ipairs(added) do overlay.draw(fainted, {}, {}) end
-  eq(xpDrawn, 0, "with the player down the XP bar drew nothing")
-  eq(caughtDrawn, 1, "while the enemy-side marker drew as usual")
+  allowed = false
+  for _, overlay in ipairs(added) do overlay.draw({}, {}, {}) end
+  eq(gatedDrawn, 0, "a closed gate stops its own overlay")
+  eq(ungatedDrawn, 1, "and leaves the overlay beside it drawing")
 
-  local alive = { player = { mon = { hp = 21 } } }
-  for _, overlay in ipairs(added) do overlay.draw(alive, {}, {}) end
-  eq(xpDrawn, 1, "and with the player up the XP bar draws again")
-  eq(caughtDrawn, 2, "the marker being unaffected throughout")
+  allowed = true
+  for _, overlay in ipairs(added) do overlay.draw({}, {}, {}) end
+  eq(gatedDrawn, 1, "an open gate lets it through again")
+  eq(ungatedDrawn, 2, "the other being unaffected throughout")
 end
+
+-- The XP bar's own guard -- "stop once the player's Pokemon faints, because
+-- the engine has cleared the HUD out from under the bar" -- moved with the
+-- feature.  It is asserted in Gen1BattleUI's suite now, not here.
 
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

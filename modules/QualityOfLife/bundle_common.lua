@@ -72,47 +72,22 @@ function Common.services(mod, generation, aliases)
   }
 end
 
--- ---------------------------------------------------------------- the faint gate
+-- ---------------------------------------------------- the gate, and who used it
 --
--- Upstream's XP bar keeps drawing after the player's Pokemon faints.
+-- `Common.install` can wrap every overlay a feature registers in a predicate,
+-- so the feature only draws while that predicate holds.  It exists because
+-- the host keeps ONE overlay list for the whole bundle: a gate belonging to
+-- one feature has to sit on that feature's own overlay, or the other feature
+-- drawing through the same host inherits it.
 --
--- The engine clears the player HUD the moment the mon goes down -- the name,
--- the level and the HP bar all disappear behind the "<NAME> fainted!" box --
--- but `battle.player` is still a table and the overlay's own guards
--- (`safari`, `demo`, `showPlayerBack`, the intro slide) are all still false.
--- So the bar carries on being drawn into the empty space where the HUD was:
--- a blue stripe floating over nothing until the battle moves on.
---
--- The fix is upstream's own idiom, applied to the side it was missed on. The
--- caught-indicator feature in this same mod draws over the *enemy* HUD and
--- guards itself with an `enemyHudVisible` predicate whose last clause is
--- `not battle.enemy.fainted`. The XP bar draws over the *player* HUD and has
--- no matching predicate. This is that predicate.
---
--- It is applied here rather than inside qol_feature_xp_bar.lua because that
--- file is still recognisably unxpected-uxp's, and keeping this repository's
--- corrections in its own layer makes it obvious which behaviour came from
--- where. Fold it in if that stops being useful.
+-- The XP bar was what needed it -- it drew over the PLAYER's HUD and had to
+-- stop once that Pokemon fainted and the engine cleared the HUD out from
+-- under it.  That feature is Gen1BattleUI's now, and its guard went with it,
+-- so nothing in this bundle passes a gate today.  The mechanism stays because
+-- it is four lines and the next overlay to need one will need exactly this;
+-- the predicate does not, because it was about a HUD this bundle no longer
+-- draws on.
 
--- `fainted` is the flag the engine sets on a battler and the one upstream
--- already reads for the enemy. The HP check behind it is belt and braces: it
--- is what Gen1Follower, Gen1SoundQOL and exp_share all use to decide whether
--- a Pokemon is still standing, and it covers the frame between the HP hitting
--- zero and the flag being set.
-function Common.playerHudVisible(battle)
-  local player = battle and battle.player
-  if type(player) ~= "table" then return false end
-  if player.fainted then return false end
-  local mon = player.mon
-  if type(mon) == "table" and (tonumber(mon.hp) or 1) <= 0 then return false end
-  return true
-end
-
--- Wrap every overlay a feature registers in a predicate, without the feature
--- or the shared host knowing.  The host keeps one overlay list for the whole
--- bundle, so the gate has to sit on the individual overlay rather than on the
--- host -- the caught marker draws through the same host and must not inherit
--- the XP bar's gate.
 local function gated(host, predicate)
   return {
     add = function(_, overlay)
@@ -156,7 +131,8 @@ end
 --   path       upstream feature file, vendored as published
 --   wantsBattle  true for the two that draw over a battle
 --   gate       optional predicate; the feature's battle overlays only draw
---              when it returns true.  See Common.playerHudVisible.
+--              when it returns true.  Nothing passes one today; see
+--              the note above `gated`.
 function Common.install(mod, path, wantsBattle, gate)
   local load_ = loaderFor(mod)
 

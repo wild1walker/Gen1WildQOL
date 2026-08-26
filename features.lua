@@ -222,27 +222,21 @@ return {
     -- other and a player who wants easy HM use has no particular reason to
     -- want an XP bar.
 
-    {
-      id = "xpbar",
-      maintained = true,
-      priority = 100,
-      dir = "QualityOfLife",
-      entry = "bundle_xp_bar.lua",
-      label = "BATTLE XP BAR",
-      description = "A GEN 2 STYLE EXPERIENCE BAR UNDER YOUR POKEMON IN BATTLE.",
-      -- The master is the feature's own row, not a switch of the bundle's.
-      -- It used to be the latter, and that was a bug: the synthesized switch
-      -- only decided whether to INSTALL, while this row decides whether the
-      -- feature does anything -- so turning the feature on installed
-      -- something still set to OFF, and the row that actually mattered was
-      -- buried one screen down saying the opposite. Donating the row makes
-      -- the two one switch, and a live one: the feature reads it every time
-      -- it acts, so there is nothing to relaunch.
-      enabledKey = "qol_exp_bar",
-      default = "on",
-      gen1_only = true,
-      aliases = { "qol_xp_bar" },
-    },
+    -- The XP bar used to be here, as a fifth row.  It is Gen1BattleUI's now
+    -- (Gen1WildUI), because it is a battle UI feature and that is the battle
+    -- UI mod -- and because of a bug that had no fix on this side of it.
+    -- Drawn from here it went down in a wrapper around battle.draw, which
+    -- runs after every link on battle.overlay whatever priority they carry,
+    -- so it could not be drawn over.  It clipped itself to x=88 instead --
+    -- where the VANILLA move panel ends -- and Gen1BattleUI's panel ends at
+    -- 112, so twenty-four pixels of blue line lay across its PP row every
+    -- time a move menu was up.  Over there the bar and the panel are drawn by
+    -- one function, bar first, and the panel covers it because it is drawn
+    -- after it.  Nothing to clip and nothing to keep in step.
+    --
+    -- `qol_exp_bar` is deliberately NOT reused for anything else here: a key
+    -- that means something new to a save that already has it set is worse
+    -- than a key that is gone.
 
     {
       id = "caught",

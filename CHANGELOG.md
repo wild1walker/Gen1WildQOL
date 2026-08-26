@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.3.0
+
+**`BATTLE XP BAR` has moved out of this bundle.** It is `XP BAR` in
+[Gen1BattleUI](https://github.com/wild1walker/Gen1BattleUI) now, which ships in
+[Gen1WildUI](https://github.com/wild1walker/Gen1WildUI) — a battle UI feature,
+in the battle UI mod.
+
+The move is a bug fix, not a tidy-up. From here the bar was drawn by a wrapper
+around `battle.draw`, which runs after **every** link on `battle.overlay`
+however high a priority they carry — so it could not be drawn over by anything
+and had to clip itself instead. It clipped to `x=88`, which is where the
+*vanilla* move panel ends; Gen1BattleUI draws a fourteen-tile panel that ends
+at 112, and the twenty-four pixels between were a blue line lying across that
+panel's PP row every time a move menu was open. Raising Gen1BattleUI's hook
+priority did nothing, because priority was never what decided the order.
+
+Inside Gen1BattleUI the bar and the panel are drawn by one function, bar
+first, so the panel covers it the way it covers anything else beneath it — and
+a panel that changes width takes the covering with it, which no clip could
+have done.
+
+- If you run **Gen1WildUI**, the bar is there and on by default, as it was
+  here. Its row is `XP BAR` under `BATTLE MENUS`.
+- If you run **this bundle alone**, the bar is gone. That is the cost of the
+  move and it is a real one.
+- `qol_exp_bar` is retired rather than reused. A key that means something new
+  to a save that already has it set is worse than a key that is absent.
+- The 3D-battle path is **not** carried over. It drew into another mod's
+  canvas through a handshake with that mod's `snapHUDs`, and the handshake
+  decided whether the path was taken at all; ported without it, the path would
+  be taken whenever that mod was loaded, which is worse than not having it.
+- The faint guard moved with the feature — the bar still stops when your
+  Pokémon goes down and the engine clears the HUD from under it.
+
 ## 1.2.0
 
 Follows [Gen1AutoSave](https://github.com/wild1walker/Gen1AutoSave) to **1.4.0**

@@ -36,14 +36,17 @@ return {
         .. "top-left and sliding in from that edge, rather than the "
         .. "dialogue box's full-width geometry flush with the bottom of the "
         .. "screen. POSITION: BOTTOM restores the original placement",
-      "the XP bar stops drawing when the player's Pokemon faints. Upstream "
-        .. "keeps drawing it into the space the engine just cleared the "
-        .. "player HUD from -- the caught-indicator feature in the same mod "
-        .. "already guards its own side on the enemy's fainted flag, and "
-        .. "this is the matching guard for the player's",
-      "the four Quality of Life features are four separate rows rather than "
-        .. "one submenu, because they have nothing to do with each other, "
-        .. "and all four ship on -- the XP bar, the caught marker, a "
+      "the XP bar is not in this bundle: it is XP BAR in Gen1BattleUI, which "
+        .. "ships in Gen1WildUI. Drawn from here it went down in a wrapper "
+        .. "around battle.draw, which runs after every battle.overlay link "
+        .. "whatever priority they carry, so it could not be drawn over and "
+        .. "clipped itself to x=88 -- where the VANILLA move panel ends. "
+        .. "Gen1BattleUI's panel ends at 112, so the bar lay across its PP "
+        .. "row. Drawn from inside that mod it goes down before the panel "
+        .. "and is covered by it, with nothing to keep in step",
+      "the three remaining Quality of Life features are three separate rows "
+        .. "rather than one submenu, because they have nothing to do with "
+        .. "each other, and all three ship on -- the caught marker, a "
         .. "three-second area banner and easy HM use",
       "EXP SHARE is configured in this bundle's menu rather than on the "
         .. "engine's OPTIONS screen, so every feature here has one home",
@@ -63,9 +66,10 @@ return {
     },
   },
   credits = {
-    { who = "unxpected-uxp", for_ = "the Quality of Life mod: the XP bar, "
-      .. "the caught marker, easy interactions and the location banner this "
-      .. "one redraws. Maintained here now, theirs by origin" },
+    { who = "unxpected-uxp", for_ = "the Quality of Life mod: the caught "
+      .. "marker, easy interactions and the location banner this one "
+      .. "redraws, and the XP bar that now ships in Gen1BattleUI. "
+      .. "Maintained here now, theirs by origin" },
     { who = "ShaneMcGovernIE", for_ = "exp_share, essentially whole -- a "
       .. "different default and a different menu around it. Maintained here "
       .. "now, theirs by origin" },

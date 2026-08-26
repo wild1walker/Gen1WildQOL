@@ -24,8 +24,7 @@ itself. Nothing is all-or-nothing.
 | **FOLLOWERS** | on | [Gen1Follower](https://github.com/wild1walker/Gen1Follower) |
 | **ALL 151** | on | [Gen151](https://github.com/wild1walker/Gen151) |
 | **EXP SHARE** | on, **GEN 5+** | originally [exp_share](https://github.com/ShaneMcGovernIE/exp_share) ‡ |
-| **BATTLE XP BAR** | on | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
-| **CAUGHT MARKER** | on | Quality of Life ‡ |
+| **CAUGHT MARKER** | on | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
 | **AREA BANNER** | on, 3s | Quality of Life ‡ |
 | **EASY HM USE** | on | Quality of Life ‡ |
 | **MENU LAYOUT** † | on | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) |
@@ -67,7 +66,7 @@ A row marked `*` needs a relaunch to take effect, and the footer says so. That
 happens for features whose upstream mod has no off switch of its own: the
 bundle gates those at load rather than pretending to switch something that is
 already installed. Features that do have one — SPRINT, AUTO SAVE, AUTO
-CONTINUE, ALL 151, AREA BANNER, BATTLE XP BAR, CAUGHT MARKER and EASY HM USE
+CONTINUE, ALL 151, AREA BANNER, CAUGHT MARKER and EASY HM USE
 — switch live.
 
 ## What is different from the standalone mods
@@ -81,11 +80,17 @@ CONTINUE, ALL 151, AREA BANNER, BATTLE XP BAR, CAUGHT MARKER and EASY HM USE
   — carrying one line of text, over the ground you are walking on. It is now a
   plaque sized to the name it carries, anchored top-left, sliding in and out
   from that edge. `POSITION` moves it and `BOTTOM` restores the original.
-- **The XP bar stops drawing when your Pokémon faints.** Upstream's keeps
-  going, leaving a blue stripe over the empty space the HUD was cleared from.
-  Fixed here without editing the vendored file — see
-  `overlays/QualityOfLife/bundle_common.lua`.
-- **The four Quality of Life features are four rows**, not one submenu.
+- **The XP bar is not here any more.** It is `XP BAR` in
+  [Gen1BattleUI](https://github.com/wild1walker/Gen1BattleUI), which ships in
+  [Gen1WildUI](https://github.com/wild1walker/Gen1WildUI) — a battle UI
+  feature, in the battle UI mod. The move that mattered was not tidiness: from
+  here the bar was drawn by a wrapper around `battle.draw`, which runs after
+  every `battle.overlay` link whatever priority they carry, so it could not be
+  drawn over and clipped itself to `x=88` — where the *vanilla* move panel
+  ends. Gen1BattleUI's panel ends at 112, so it lay across that panel's PP
+  row. Drawn from inside that mod it simply goes down before the panel does.
+- **The three remaining Quality of Life features are three rows**, not one
+  submenu.
 - **EXP SHARE is configured here**, not on the engine's own OPTIONS screen.
 
 ## Features in both bundles
@@ -239,9 +244,9 @@ maintained in this repository now rather than tracked upstream — that changes
 who looks after the code, not who wrote it:
 
 - **[unxpected-uxp](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol)**
-  — the XP bar, the caught marker, easy interactions, and the location banner
-  this bundle redraws. `BATTLE XP BAR`, `CAUGHT MARKER`, `AREA BANNER` and
-  `EASY HM USE` descend from their work.
+  — the caught marker, easy interactions, and the location banner this bundle
+  redraws. `CAUGHT MARKER`, `AREA BANNER` and `EASY HM USE` descend from their
+  work, as does the XP bar that now ships in Gen1BattleUI.
 - **[ShaneMcGovernIE](https://github.com/ShaneMcGovernIE/exp_share)** —
   exp_share, essentially whole. `EXP SHARE` is their mod with a different
   default and a different menu around it.
