@@ -41,6 +41,14 @@ other bundle is the one that wins.
   — with one line of text in it. It is now a plaque sized to the name it
   carries, anchored top-left by default, sliding in and out from its edge.
   `POSITION` moves it; `BOTTOM` restores upstream's placement.
+- **The XP bar stops drawing when your Pokémon faints.** Upstream's keeps
+  going: the engine clears the player HUD the moment the mon goes down, but
+  the bar's guards (`safari`, `demo`, `showPlayerBack`, the intro slide) are
+  all still false, so it carries on painting a blue stripe over the empty
+  space the HUD was cleared from. The caught-indicator feature in the same mod
+  already guards its own side with `not battle.enemy.fainted`; this is the
+  matching predicate for the player side, applied without editing the vendored
+  file.
 - **The four Quality of Life features are separate rows** rather than one
   submenu, because wanting easy HM use is no reason to want an XP bar.
 - **EXP SHARE is configured in the bundle menu**, not on the engine's own

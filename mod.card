@@ -32,6 +32,11 @@ return {
         .. "top-left and sliding in from that edge, rather than the "
         .. "dialogue box's full-width geometry flush with the bottom of the "
         .. "screen. POSITION: BOTTOM restores the original placement",
+      "the XP bar stops drawing when the player's Pokemon faints. Upstream "
+        .. "keeps drawing it into the space the engine just cleared the "
+        .. "player HUD from -- the caught-indicator feature in the same mod "
+        .. "already guards its own side on the enemy's fainted flag, and "
+        .. "this is the matching guard for the player's",
       "the four Quality of Life features are four separate rows rather than "
         .. "one submenu, because they have nothing to do with each other",
       "EXP SHARE is configured in this bundle's menu rather than on the "

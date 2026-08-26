@@ -74,6 +74,10 @@ CONTINUE, ALL 151, AREA BANNER — switch live.
   — carrying one line of text, over the ground you are walking on. It is now a
   plaque sized to the name it carries, anchored top-left, sliding in and out
   from that edge. `POSITION` moves it and `BOTTOM` restores the original.
+- **The XP bar stops drawing when your Pokémon faints.** Upstream's keeps
+  going, leaving a blue stripe over the empty space the HUD was cleared from.
+  Fixed here without editing the vendored file — see
+  `overlays/QualityOfLife/bundle_common.lua`.
 - **The four Quality of Life features are four rows**, not one submenu.
 - **EXP SHARE is configured here**, not on the engine's own OPTIONS screen.
 
