@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.11.0
+
+**FOLLOWERS now covers the Pokémon standing on the maps**, following
+[Gen1Follower](https://github.com/wild1walker/Gen1Follower) to 1.3.1.
+
+Gen 1 draws every Pokémon that is part of a map from one of five shared
+sheets — a "monster", a "bird", a "fairy", a "seel" and the one Snorlax. A
+single monster is Mewtwo, a Meowth, a Machop and a Kangaskhan at once, and one
+fairy is the Pokémon Fan Club's Pikachu as readily as it is a Clefairy. So the
+follower walking behind you came from a set of 251 sheets while every Pokémon
+you walked past did not, and the two never matched.
+
+Fifty map objects across Red, Blue and Yellow now draw from the same sheet the
+follower would use for that species, at the same Pokédex-proportional size:
+the Fan Club's Pikachu and Seel, both sleeping Snorlax, Mewtwo, Articuno,
+Zapdos and Moltres, Bill's fused form, Melanie's three, every Pokémon Center's
+Chansey, and the rest. Each is picked by the map object's own name rather than
+by its sprite id, so a Pidgey stays a Pidgey and a Pidgeot a Pidgeot.
+
+Three are deliberately untouched: the monster, bird and fairy in the Copycat's
+room are dolls and her joke is that they are, and the Power Plant's Voltorb and
+Electrode wear the item-ball sprite because they are pretending to be item
+balls. Bill is the one entry no game data settles — he only says he "got
+combined with a #MON" — and he is drawn as a Kabuto by choice.
+
+- A new row, `MAP POKEMON`, appears under FOLLOWERS in the bundle menu on its
+  own; it is on by default and turning it off puts the cart's sprites back
+  without a map reload. No existing option key moved, and no save key moved.
+- FOLLOWERS' menu description says what the feature covers now.
+
+Nothing else in the bundle changed: the other eight tracked mods are pinned
+where 1.10.1 left them, and the four features maintained here are untouched.
+
 ## 1.10.1
 
 **ALL 151 was switching itself off on every install.** The whole feature: no

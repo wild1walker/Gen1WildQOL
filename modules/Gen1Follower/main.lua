@@ -90,6 +90,13 @@ return function(mod)
         help = "Scale follower sprites from each Pokemon's Pokedex height.",
       },
       {
+        key = "overworld_mon_sprites",
+        type = "toggle",
+        label = "MAP POKEMON",
+        default = true,
+        help = "Draw the Pokemon standing on maps from the same 251 sheets.",
+      },
+      {
         key = "follower_size_percent",
         type = "number",
         label = "FOLLOWER SIZE",
@@ -256,6 +263,31 @@ return function(mod)
     return followerImgCache[dexStr]
   end
 
+  -- Every sheet in assets/sprites is the same 16x96: six 16x16 frames, in
+  -- SpriteRenderer's STAND/WALK order. So one quad set serves all 251, and --
+  -- unlike the renderer's own self.frames -- it does not depend on the frame
+  -- count the record carried when that renderer was built. A Gold mon record
+  -- is a two-frame party icon until this mod repoints it, and a renderer made
+  -- before that has no quad for frame 3 to hand back.
+  local followerQuads = {}
+  local function followerQuad(frameIdx)
+    frameIdx = tonumber(frameIdx)
+    if not frameIdx or frameIdx < 0 or frameIdx > 5 then return nil end
+    frameIdx = math.floor(frameIdx)
+    if followerQuads[frameIdx] == nil then
+      local quad
+      if love and love.graphics and love.graphics.newQuad then
+        local ok, made = pcall(love.graphics.newQuad,
+          0, frameIdx * 16, 16, 16, 16, 96)
+        quad = ok and made or nil
+      end
+      -- Headless (the test drivers have no graphics module) still wants the
+      -- rectangle, in the plain-table shape the redraw queue accepts.
+      followerQuads[frameIdx] = quad or { 0, frameIdx * 16, 16, 16 }
+    end
+    return followerQuads[frameIdx]
+  end
+
   -- ----------------------------------------------------------------------
   -- 2. Helper functions: health, mon fingerprint, selection
   -- ----------------------------------------------------------------------
@@ -395,6 +427,247 @@ return function(mod)
   end
 
   -- ----------------------------------------------------------------------
+  -- 4b. The map POKeMON: overworld objects that ARE a Pokemon
+  -- ----------------------------------------------------------------------
+  -- Gen 1 draws every Pokemon standing on a map from one of five shared
+  -- sheets -- MonsterSprite, BirdSprite, FairySprite, SeelSprite and the one
+  -- dedicated SnorlaxSprite (pokered/data/sprites/sprites.asm). A single
+  -- "monster" is Mewtwo, Bill's fused form, a Meowth and a Machop at once,
+  -- and one "fairy" is the Pokemon Fan Club's Pikachu as readily as it is a
+  -- Clefairy. So a game whose follower comes from this mod's own 251 sheets
+  -- still walked past Pokemon wearing the cart's generic art.
+  --
+  -- The objects are a closed set -- 53 across Red, Blue and Yellow -- and each
+  -- is named after the species it is meant to be by the `const_export` in
+  -- pokered/pokeyellow's data/maps/objects/*.asm. The port keeps that name on
+  -- the object (`obj.name`, read back as `npc.def.name` in src/world/NPC.lua),
+  -- so the NAME picks the sheet here. The sprite id cannot: losing the species
+  -- is the very thing it does.
+  --
+  -- Three of the 53 are deliberately absent:
+  --   COPYCATSHOUSE2F_MONSTER  the three in the Copycat's room are dolls, and
+  --   COPYCATSHOUSE2F_BIRD     the joke is that they are ("This is a rare
+  --   COPYCATSHOUSE2F_FAIRY    #MON! Huh? It's only a doll!"). Real art gives
+  --                            the punchline away before she says it.
+  -- The Power Plant's Voltorb and Electrode are absent too, and not by
+  -- oversight: they wear SPRITE_POKE_BALL because they are pretending to be
+  -- item balls, which is the whole trap.
+  --
+  -- One entry below is a choice rather than a reading. Bill only ever says he
+  -- "got combined with a #MON" and the cart never names it, so BILL_POKEMON is
+  -- the one row here that no game data can settle. It is Kabuto by decision --
+  -- the shell Bill spends his anime appearance stuck inside -- and it is a
+  -- one-word edit for anyone who would rather he were something else.
+  local OVERWORLD_MON_SPECIES = {
+    -- Not from the game: see the note above. Bill's fused form has no species.
+    BILLSHOUSE_BILL_POKEMON = "KABUTO",
+    CELADONCITY_POLIWRATH = "POLIWRATH",
+    CELADONMANSION1F_CLEFAIRY = "CLEFAIRY",
+    CELADONMANSION1F_MEOWTH = "MEOWTH",
+    CELADONMANSION1F_NIDORANF = "NIDORAN_F",
+    CELADONPOKECENTER_CHANSEY = "CHANSEY",
+    CERULEANCAVEB1F_MEWTWO = "MEWTWO",
+    CERULEANCITY_SLOWBRO = "SLOWBRO",
+    CERULEANMELANIESHOUSE_BULBASAUR = "BULBASAUR",
+    CERULEANMELANIESHOUSE_ODDISH = "ODDISH",
+    CERULEANMELANIESHOUSE_SANDSHREW = "SANDSHREW",
+    CERULEANPOKECENTER_CHANSEY = "CHANSEY",
+    CINNABARPOKECENTER_CHANSEY = "CHANSEY",
+    COPYCATSHOUSE1F_CHANSEY = "CHANSEY",
+    COPYCATSHOUSE2F_DODUO = "DODUO",
+    FUCHSIACITY_CHANSEY = "CHANSEY",
+    FUCHSIACITY_KANGASKHAN = "KANGASKHAN",
+    FUCHSIACITY_LAPRAS = "LAPRAS",
+    FUCHSIACITY_SLOWPOKE = "SLOWPOKE",
+    FUCHSIAPOKECENTER_CHANSEY = "CHANSEY",
+    INDIGOPLATEAULOBBY_CHANSEY = "CHANSEY",
+    LAVENDERCUBONEHOUSE_CUBONE = "CUBONE",
+    LAVENDERPOKECENTER_CHANSEY = "CHANSEY",
+    MRFUJISHOUSE_NIDORINO = "NIDORINO",
+    MRFUJISHOUSE_PSYDUCK = "PSYDUCK",
+    MTMOONPOKECENTER_CHANSEY = "CHANSEY",
+    -- Just "NIDORAN" in the name; the talk script's PlayCry says which one
+    -- (data/scripts/flavor/pewter_nidoran_house.lua).
+    PEWTERNIDORANHOUSE_NIDORAN = "NIDORAN_M",
+    PEWTERPOKECENTER_CHANSEY = "CHANSEY",
+    PEWTERPOKECENTER_JIGGLYPUFF = "JIGGLYPUFF",
+    POKEMONFANCLUB_CLEFAIRY = "CLEFAIRY",
+    POKEMONFANCLUB_PIKACHU = "PIKACHU",
+    POKEMONFANCLUB_SEEL = "SEEL",
+    POWERPLANT_ZAPDOS = "ZAPDOS",
+    ROCKTUNNELPOKECENTER_CHANSEY = "CHANSEY",
+    ROUTE12_SNORLAX = "SNORLAX",
+    ROUTE16_SNORLAX = "SNORLAX",
+    ROUTE16FLYHOUSE_FEAROW = "FEAROW",
+    SAFFRONCITY_PIDGEOT = "PIDGEOT",
+    SAFFRONPIDGEYHOUSE_PIDGEY = "PIDGEY",
+    SAFFRONPOKECENTER_CHANSEY = "CHANSEY",
+    SEAFOAMISLANDSB4F_ARTICUNO = "ARTICUNO",
+    SSANNE1FROOMS_WIGGLYTUFF = "WIGGLYTUFF",
+    SSANNEB1FROOMS_MACHOKE = "MACHOKE",
+    SUMMERBEACHHOUSE_PIKACHU = "PIKACHU",
+    VERMILIONCITY_MACHOP = "MACHOP",
+    VERMILIONPIDGEYHOUSE_PIDGEY = "PIDGEY",
+    VERMILIONPOKECENTER_CHANSEY = "CHANSEY",
+    VICTORYROAD2F_MOLTRES = "MOLTRES",
+    VIRIDIANNICKNAMEHOUSE_SPEAROW = "SPEAROW",
+    VIRIDIANPOKECENTER_CHANSEY = "CHANSEY",
+  }
+
+  -- An object name is only a name: a ROM hack, or a mod that adds a map, is
+  -- free to reuse one on a person. The sheet the object is ALREADY wearing is
+  -- the other half of the check -- these are the only sheets the cart draws a
+  -- Pokemon from, and no human NPC uses one. Yellow's per-species sheets are
+  -- listed too: they name the right species already, but they are still the
+  -- cart's art rather than this mod's, and matching is the point.
+  local OVERWORLD_MON_SHEETS = {
+    SPRITE_MONSTER = true, SPRITE_BIRD = true, SPRITE_FAIRY = true,
+    SPRITE_SEEL = true, SPRITE_SNORLAX = true, SPRITE_PIKACHU = true,
+    SPRITE_SANDSHREW = true, SPRITE_ODDISH = true, SPRITE_BULBASAUR = true,
+    SPRITE_JIGGLYPUFF = true, SPRITE_CLEFAIRY = true, SPRITE_CHANSEY = true,
+  }
+
+  local function overworldMonsEnabled()
+    return optionValue("overworld_mon_sprites", true) == true
+  end
+
+  local function monSpriteId(species)
+    local dex = dexForSpecies(species)
+    if not dex then return nil end
+    return string.format("SPRITE_GEN1FOLLOWER_MON_%03d", dex)
+  end
+
+  -- One record per species the maps use, not one per object: two Snorlax and
+  -- eleven Chansey share a sheet, so they share a record.
+  local overworldMonDefs = {}
+  local function registerOverworldMonDefs()
+    if isGen2 or not (mod.content and mod.content.sprites) then return end
+    for _, species in pairs(OVERWORLD_MON_SPECIES) do
+      local id = monSpriteId(species)
+      if id and not overworldMonDefs[id] then
+        local def = {
+          id = id,
+          image = assetPath(species),
+          frames = 6,
+          walker = true,
+          trueColor = colorMode(),
+          -- Read by the voxel billboard hook further down, so a map POKeMON
+          -- is Pokedex-scaled in 3D exactly as it is in 2D.
+          pokepcFollowerSpecies = species,
+        }
+        local ok = pcall(function()
+          if mod.content.sprites:get(id) then
+            mod.content.sprites:patch(id, def)
+          else
+            mod.content.sprites:register(id, def)
+          end
+        end)
+        if ok then overworldMonDefs[id] = species end
+      end
+    end
+  end
+  registerOverworldMonDefs()
+
+  -- The species a map object should be drawn as, or nil to leave it alone.
+  local function overworldMonSpecies(objDef)
+    if not (overworldMonsEnabled() and type(objDef) == "table") then return nil end
+    local species = OVERWORLD_MON_SPECIES[objDef.name]
+    if not species then return nil end
+    if not OVERWORLD_MON_SHEETS[objDef.sprite] then return nil end
+    return species
+  end
+
+  -- Gold needs none of the above. Its overworld Pokemon are SPRITE_POKEMON_*
+  -- records that already name a `species` and point at that mon's shared
+  -- PARTY MENU icon (src/import/RomExtractorGen2.lua extractMonSprites), so
+  -- the id maps one-to-one and the record itself can carry this mod's sheet.
+  -- No object table would help there: the generic art is in the record.
+  local gen2MonOriginals = {}
+
+  -- Keep the live records in step with the options. Registration runs before
+  -- mod.game exists, so the Pokedex-derived size -- the one thing that needs
+  -- the loaded game -- is filled in here instead, on map entry and whenever
+  -- an option moves.
+  local function refreshOverworldMonDefs(game)
+    local sprites = spritesFor(game)
+    if type(sprites) ~= "table" then return end
+    local enabled = overworldMonsEnabled()
+    local trueColor = colorMode()
+    if isGen2 then
+      for id, def in pairs(sprites) do
+        if type(def) == "table" and def.spriteType == "POKEMON_SPRITE"
+           and type(def.species) == "string" then
+          local saved = gen2MonOriginals[id]
+          if not saved then
+            saved = { image = def.image, frames = def.frames,
+                      walker = def.walker, trueColor = def.trueColor }
+            gen2MonOriginals[id] = saved
+          end
+          if enabled and dexForSpecies(def.species) then
+            def.image = assetPath(def.species)
+            def.frames = 6
+            def.walker = false
+            def.trueColor = trueColor
+            def.pokepcFollowerSpecies = def.species
+            def.pokepcFollowerVisualScale = followerVisualScale(def.species)
+          else
+            def.image, def.frames = saved.image, saved.frames
+            def.walker, def.trueColor = saved.walker, saved.trueColor
+            def.pokepcFollowerSpecies = nil
+            def.pokepcFollowerVisualScale = nil
+          end
+        end
+      end
+      return
+    end
+    if not enabled then return end
+    for id, species in pairs(overworldMonDefs) do
+      local def = sprites[id]
+      if type(def) == "table" then
+        def.trueColor = trueColor
+        def.pokepcFollowerSpecies = species
+        def.pokepcFollowerVisualScale = followerVisualScale(species)
+      end
+    end
+  end
+
+  -- Gen 1 builds one NPC per map object and hands SpriteRenderer the sheet the
+  -- object names (src/world/NPC.lua). Swapping the RENDERER afterwards, rather
+  -- than the object's `sprite` field or the shared record, leaves the map data
+  -- and every other object on that sheet exactly as they were -- which is what
+  -- keeps the Copycat's dolls and the Power Plant's item balls out of this.
+  local overworldNPCModule, origNPCNew, wrappedNPCNew
+  local function overworldMonRenderer(data, npc, objDef)
+    local species = overworldMonSpecies(objDef)
+    local id = species and monSpriteId(species)
+    local def = id and data and data.sprites and data.sprites[id]
+    if not def then return nil end
+    local ok, sprite = pcall(SpriteRenderer.new, def, npc and npc.id)
+    return ok and sprite or nil
+  end
+
+  -- NPCs are pooled and built once (OverworldState.pooledNPC), so turning the
+  -- option off mid-game has to reach the ones already standing on the map
+  -- rather than wait for the next map load.
+  local function resyncOverworldMons(game, ow)
+    if isGen2 or not (ow and ow.npcs) then return end
+    local data = game and game.data
+    for _, npc in ipairs(ow.npcs) do
+      if type(npc) == "table" and npc.def then
+        local sprite = overworldMonRenderer(data, npc, npc.def)
+        if sprite then
+          npc.pokepcVanillaSprite = npc.pokepcVanillaSprite or npc.sprite
+          npc.sprite = sprite
+        elseif npc.pokepcVanillaSprite then
+          npc.sprite = npc.pokepcVanillaSprite
+        end
+      end
+    end
+  end
+
+  -- Declared here, installed below the hot-reload teardown.
+  local gen2NPCModule, origBounceFrame, wrappedBounceFrame
+  -- ----------------------------------------------------------------------
   -- 5. Icon patching (for party menu and UI)
   -- ----------------------------------------------------------------------
   -- Patch mod.content.icons for each species
@@ -531,6 +804,54 @@ return function(mod)
     pcall(previous.restore)
   end
 
+  -- Installed here, below the teardown above: a hot reload has to unwrap the
+  -- previous copy of this mod BEFORE this one wraps anything, or each reload
+  -- leaves another layer behind and `restore` never reaches vanilla again.
+  if not isGen2 then
+    local okNPC, NPCModule = pcall(require, "src.world.NPC")
+    if okNPC and type(NPCModule) == "table"
+       and type(NPCModule.new) == "function" then
+      origNPCNew = NPCModule.new
+      wrappedNPCNew = function(data, mapId, objDef, ...)
+        local npc = origNPCNew(data, mapId, objDef, ...)
+        if type(npc) == "table" then
+          local sprite = overworldMonRenderer(data, npc, objDef)
+          if sprite then
+            npc.pokepcVanillaSprite = npc.pokepcVanillaSprite or npc.sprite
+            npc.sprite = sprite
+          end
+        end
+        return npc
+      end
+      NPCModule.new = wrappedNPCNew
+      overworldNPCModule = NPCModule
+    end
+  end
+
+  -- OBJECT_ACTION_BOUNCE alternates a Gold mon object between frames 0 and 1
+  -- of its sheet. On a party icon those two are the bob; on a 251 sheet they
+  -- are "stand down" and "stand UP", which reads as the mon spinning on the
+  -- spot, so the raised half of the bounce is moved to the down-facing STEP
+  -- frame instead.
+  if isGen2 then
+    local okNPC, NPCModule = pcall(require, "src.world.gen2.Npc")
+    if okNPC and type(NPCModule) == "table"
+       and type(NPCModule.bounceFrame) == "function" then
+      origBounceFrame = NPCModule.bounceFrame
+      wrappedBounceFrame = function(self, ...)
+        local frame = origBounceFrame(self, ...)
+        local def = self and self.sprite and self.sprite.def
+        if frame == 1 and type(def) == "table"
+           and def.id ~= SPRITE_ID and def.pokepcFollowerSpecies then
+          return (SpriteRenderer.WALK and SpriteRenderer.WALK.down) or 3
+        end
+        return frame
+      end
+      NPCModule.bounceFrame = wrappedBounceFrame
+      gen2NPCModule = NPCModule
+    end
+  end
+
   local originalUpdate = PikachuFollower.update
   local originalOnMapEntered = PikachuFollower.onMapEntered
   local originalTalk = PikachuFollower.talk
@@ -649,16 +970,34 @@ return function(mod)
     return 0, 0, 0
   end
 
-  local origSpriteDraw = SpriteRenderer.draw
-  local wrappedSpriteDraw
-  wrappedSpriteDraw = function(self, px, py, camX, camY, facing, walkPhase, stepFlip)
-    if self and self.def and self.def.id == SPRITE_ID then
+  -- Which species' follower art this renderer paints, and whether it is the
+  -- follower's own sprite. The follower resolves live from the party; a map
+  -- POKeMON's record names one fixed species and never changes.
+  local function followerArtSpecies(self)
+    local def = self and self.def
+    if type(def) ~= "table" then return nil, false end
+    if def.id == SPRITE_ID then
       -- Healthy-only: a fainted follower must not be drawn. With no healthy
       -- party mon at all there is nothing to draw and shouldSpawn is already
-      -- false, so returning here simply leaves the tile empty.
+      -- false, so a nil species here simply leaves the tile empty.
       local activeMon = getActiveFollowerMon(liveGame(), true)
-      if not activeMon then return end
-      local followerImg = getFollowerImage(activeMon.species)
+      return activeMon and activeMon.species or nil, true
+    end
+    -- Field first, option second: this runs for every sprite on screen every
+    -- frame, and all but a handful of them fail on the field alone.
+    local species = def.pokepcFollowerSpecies
+    if not species or not overworldMonsEnabled() then return nil, false end
+    return species, false
+  end
+
+  local origSpriteDraw = SpriteRenderer.draw
+  local wrappedSpriteDraw
+  wrappedSpriteDraw = function(self, px, py, camX, camY, facing, walkPhase,
+      stepFlip, topHalf, forceFlip, frameOverride)
+    local artSpecies, isFollowerSprite = followerArtSpecies(self)
+    if isFollowerSprite and not artSpecies then return end
+    if artSpecies then
+      local followerImg = getFollowerImage(artSpecies)
 
       local x = math.floor(px - camX)
       local y = math.floor(py - camY) - 4
@@ -667,13 +1006,20 @@ return function(mod)
       local WALK = SpriteRenderer.WALK or {}
       local dirMap = (walkPhase == 1) and WALK or STAND
       local frameIdx = dirMap[facing] or 0
-      local quad = self.frames and self.frames[frameIdx] or self.frames[1] or {0,0,16,16}
       local flip = (facing == "right") or (stepFlip and (facing == "up" or facing == "down"))
+      -- The engine's own frame/mirror overrides, in the order :draw applies
+      -- them: a caller-picked frame poses itself (Gold's bounce), and a
+      -- forced flip is the mirrored copy of whatever frame was chosen.
+      if frameOverride and followerQuad(frameOverride) then
+        frameIdx, flip = frameOverride, false
+      end
+      if forceFlip then flip = true end
+      local quad = followerQuad(frameIdx) or followerQuad(0)
 
       local drawX = flip and (x + 16) or x
       local flipSx = flip and -1 or 1
 
-      local scale = followerVisualScale(activeMon.species)
+      local scale = followerVisualScale(artSpecies)
       local unscaled = math.abs(scale - 1) < 0.0001
       local canDraw = love and love.graphics and love.graphics.draw
         and love.graphics.setColor and love.graphics.getColor and true or false
@@ -716,7 +1062,8 @@ return function(mod)
         0, sx, scale, 8, 16)
       return
     end
-    return origSpriteDraw(self, px, py, camX, camY, facing, walkPhase, stepFlip)
+    return origSpriteDraw(self, px, py, camX, camY, facing, walkPhase, stepFlip,
+      topHalf, forceFlip, frameOverride)
   end
   SpriteRenderer.draw = wrappedSpriteDraw
 
@@ -812,6 +1159,9 @@ return function(mod)
   -- 9. PikachuFollower function wrappers
   -- ----------------------------------------------------------------------
   local function wrappedOnMapEntered(game, ow, opts)
+    -- Before the map's own objects are built: the sheet a map POKeMON gets is
+    -- read at NPC construction, and this is what puts it in the record.
+    pcall(refreshOverworldMonDefs, game)
     local mon = getActiveFollowerMon(game, true)
     if mon then configureSpriteDef(game, mon) end
     local result = originalOnMapEntered and originalOnMapEntered(game, ow, opts)
@@ -1103,6 +1453,10 @@ return function(mod)
     originalOnMapEnteredShouldSpawn = vanillaOnMapEnteredShouldSpawn,
     wrapperResolveImage = wrappedResolveImage,
     wrapperSpriteDraw = wrappedSpriteDraw,
+    originalNPCNew = origNPCNew,
+    wrapperNPCNew = wrappedNPCNew,
+    originalBounceFrame = origBounceFrame,
+    wrapperBounceFrame = wrappedBounceFrame,
     usedShouldSpawnSetter = usedShouldSpawnSetter,
   }
 
@@ -1141,6 +1495,40 @@ return function(mod)
     if SpriteRenderer.draw == wrappedSpriteDraw and origSpriteDraw then
       SpriteRenderer.draw = origSpriteDraw
     end
+    if overworldNPCModule and overworldNPCModule.new == wrappedNPCNew
+       and origNPCNew then
+      overworldNPCModule.new = origNPCNew
+    end
+    if gen2NPCModule and gen2NPCModule.bounceFrame == wrappedBounceFrame
+       and origBounceFrame then
+      gen2NPCModule.bounceFrame = origBounceFrame
+    end
+    -- The NPCs already standing on this map were built with a renderer of
+    -- this mod's, so hand each one the sheet the cart gave it back.
+    local ow = worldFor(liveGame())
+    if ow and type(ow.npcs) == "table" then
+      for _, npc in ipairs(ow.npcs) do
+        if type(npc) == "table" and npc.pokepcVanillaSprite then
+          npc.sprite = npc.pokepcVanillaSprite
+          npc.pokepcVanillaSprite = nil
+        end
+      end
+    end
+    -- Gold's mon records are the game's own, patched in place, so put the
+    -- party-icon art back rather than leaving this mod's sheets behind on a
+    -- reload that is meant to have removed it.
+    local sprites = spritesFor(liveGame())
+    if type(sprites) == "table" then
+      for id, saved in pairs(gen2MonOriginals) do
+        local def = sprites[id]
+        if type(def) == "table" then
+          def.image, def.frames = saved.image, saved.frames
+          def.walker, def.trueColor = saved.walker, saved.trueColor
+          def.pokepcFollowerSpecies = nil
+          def.pokepcFollowerVisualScale = nil
+        end
+      end
+    end
     if PikachuFollower.__pokepcFollowersUniversal == state then
       PikachuFollower.__pokepcFollowersUniversal = nil
     end
@@ -1155,10 +1543,13 @@ return function(mod)
     mod.events:on("mod.options_changed", function(payload)
       if not (payload and payload.mod == mod.id) then return end
       local key = tostring(payload.key or "")
-      if key ~= "pokedex_follower_sizes" and key ~= "follower_size_percent" then
+      if key ~= "pokedex_follower_sizes" and key ~= "follower_size_percent"
+         and key ~= "overworld_mon_sprites" then
         return
       end
       local game = liveGame()
+      pcall(refreshOverworldMonDefs, game)
+      pcall(resyncOverworldMons, game, worldFor(game))
       local mon = getActiveFollowerMon(game, true)
       if mon then configureSpriteDef(game, mon) end
       pcall(syncLiveFollowerDef, game, worldFor(game))

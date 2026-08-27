@@ -116,7 +116,7 @@ return {
       dir = "Gen1Follower",
       entry = "main_sandbox.lua",
       label = "FOLLOWERS",
-      description = "ALL 251 GEN 1 AND GEN 2 OVERWORLD FOLLOWERS, SIZED BY POKEDEX HEIGHT.",
+      description = "ALL 251 OVERWORLD FOLLOWERS, AND THE POKEMON STANDING ON THE MAPS, SIZED BY POKEDEX HEIGHT.",
       default = true,
       aliases = { "Gen1Follower", "PokePCFollowers", "followers" },
     },
