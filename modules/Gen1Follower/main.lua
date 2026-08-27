@@ -1002,11 +1002,20 @@ return function(mod)
       local x = math.floor(px - camX)
       local y = math.floor(py - camY) - 4
 
+      -- SpriteRenderer's own pose rules, followed exactly. The mirror in
+      -- particular: the engine flips an up- or down-facing sprite only on the
+      -- STEPPING half of a stride, and `stepFlip` is not a stride -- an NPC
+      -- toggles it when a step ENDS and then stands there holding it. Mirror
+      -- on the flag alone and a standing POKeMON sits mirrored until its next
+      -- step turns it back, which reads as the thing trying to walk on the
+      -- spot. Right-facing is the flip of left-facing at any phase.
       local STAND = SpriteRenderer.STAND or {}
       local WALK = SpriteRenderer.WALK or {}
-      local dirMap = (walkPhase == 1) and WALK or STAND
+      local stepping = walkPhase == 1
+      local dirMap = (self.def.walker and stepping) and WALK or STAND
       local frameIdx = dirMap[facing] or 0
-      local flip = (facing == "right") or (stepFlip and (facing == "up" or facing == "down"))
+      local flip = facing == "right"
+        or (stepping and stepFlip and (facing == "up" or facing == "down"))
       -- The engine's own frame/mirror overrides, in the order :draw applies
       -- them: a caller-picked frame poses itself (Gold's bounce), and a
       -- forced flip is the mirrored copy of whatever frame was chosen.

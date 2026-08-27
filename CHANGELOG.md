@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.11.1
+
+**The Pokémon standing on the maps stop flipping on the spot**, following
+[Gen1Follower](https://github.com/wild1walker/Gen1Follower) to 1.3.2.
+
+1.11.0's map Pokémon mirrored themselves left-to-right and back as you walked
+around them, looking like they were trying to play a walk animation without
+going anywhere. FOLLOWERS draws those sprites itself, because it sizes them
+from the Pokédex, and its copy of the engine's pose rules mirrored an up- or
+down-facing sprite whenever it was handed `stepFlip`. The engine mirrors only
+on the stepping half of a stride — and `stepFlip` is not a stride, it is a flag
+an NPC toggles when a step *ends* and then stands there holding.
+
+The pose follows the engine rule for rule now. The follower carried the same
+latent flip, hidden because it walks in step with the player; it is fixed too.
+
+Nothing else moved: the other eight tracked mods are pinned where 1.11.0 left
+them, no option key changed, and no save key changed.
+
 ## 1.11.0
 
 **FOLLOWERS now covers the Pokémon standing on the maps**, following
