@@ -200,95 +200,130 @@ local m = install()
 ok(m.defined ~= nil, "it defines an option schema")
 ok(#m.defined == 13, "with a row for every switch (" .. tostring(#m.defined) .. ")")
 eq(m.defined[1].key, "enabled", "and the master first, which features.lua donates")
-ok(m.wrapped["render.zones"] ~= nil, "it wraps render.zones")
-ok(type(m.exports.statusColours) == "table", "and publishes what it is wearing")
 eq(m.defined[3].default, "damaging",
   "WORLD REACTS TO defaults to the statuses that take HP")
+ok(m.wrapped["render.zones"] ~= nil, "it wraps render.zones")
+ok(type(m.exports.statusColours) == "table", "and publishes what it is wearing")
 
-io.write("a poisoned party tints the world\n")
-local zones = m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }), ZONES)
-ok(zones ~= ZONES, "the zones handed back are not the ones handed in")
-ok(zones[1].colors[2][1] > zones[1].colors[2][2], "and carry the purple")
-eq(zones[1].x, ZONES[1].x, "the rect is untouched")
-eq(ZONES[1].colors[2][1], 170, "and the engine's own table was not written through")
+-- ------- the two zone lists
+--
+-- This is the bug 1.7.0 shipped.  render.zones hands a mod the UI pass -- the
+-- menus and text boxes -- while the map is drawn through a different list the
+-- overworld is asked for a few lines later.  Tinting the hook's list turned
+-- the START menu purple and left the grass alone.  So what is asserted here is
+-- both halves: the UI list comes back untouched, and the map's does not.
 
-io.write("a healthy party does not\n")
-local clean = m.wrapped["render.zones"](same,
-  stubGame({ { hp = 40, maxHP = 40 } }), ZONES)
-eq(clean, ZONES, "the zones pass straight through")
+local function worldZones()
+  return { { x = 0, y = 0, w = 320, h = 288,
+             colors = { { 255, 255, 255 }, { 170, 170, 170 },
+                        { 85, 85, 85 }, { 0, 0, 0 } } } }
+end
+
+local function drawFrame(mod, game)
+  -- the order the engine runs them in: the hook, then the map's own list
+  mod.wrapped["render.zones"](same, game, ZONES)
+  local world = game.overworld
+  if type(world.sgbWorldZones) ~= "function" then return nil end
+  return world:sgbWorldZones()
+end
+
+io.write("the map is tinted and the menu is not\n")
+local game = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+game.overworld.sgbWorldZones = worldZones
+local ui = m.wrapped["render.zones"](same, game, ZONES)
+eq(ui, ZONES, "the UI pass is handed back untouched -- the menu keeps its colour")
+local map = game.overworld:sgbWorldZones()
+ok(map[1].colors[2][1] > map[1].colors[2][2], "and the map wears the purple")
+eq(map[1].w, 320, "in world-canvas pixels, with the rect untouched")
+
+io.write("a healthy party leaves both alone\n")
+local clean = stubGame({ { hp = 40, stats = { hp = 40 } } })
+clean.overworld.sgbWorldZones = worldZones
+local cleanMap = drawFrame(m, clean)
+eq(cleanMap[1].colors[2][1], 170, "the map is the palette it was")
+
+io.write("wrapping happens once\n")
+local twice = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+twice.overworld.sgbWorldZones = worldZones
+drawFrame(m, twice)
+local first = twice.overworld:sgbWorldZones()[1].colors[2][1]
+drawFrame(m, twice)
+local second = twice.overworld:sgbWorldZones()[1].colors[2][1]
+eq(second, first, "a second frame does not tint an already-tinted list again")
 
 io.write("the tick is swallowed and replaced\n")
-local game = stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }, 12)
-local ticked = m.wrapped["render.zones"](same, game, ZONES)
-eq(game.overworld.poisonFlash, 0,
+local ticking = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 12)
+ticking.overworld.sgbWorldZones = worldZones
+local ticked = drawFrame(m, ticking)
+eq(ticking.overworld.poisonFlash, 0,
   "the engine's flash counter is taken to zero, so no black frame is drawn")
-local resting = m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }), ZONES)
+local resting = drawFrame(m, game)
 ok(C.luma(ticked[1].colors[2]) ~= C.luma(resting[1].colors[2]),
   "and the tick's frame is deeper than the resting tint")
 
 io.write("REPLACE FLASH off hands the flash back\n")
 m.stored.replace_flash = false
-local kept = stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }, 12)
-m.wrapped["render.zones"](same, kept, ZONES)
+local kept = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 12)
+kept.overworld.sgbWorldZones = worldZones
+drawFrame(m, kept)
 eq(kept.overworld.poisonFlash, 12, "the counter is left for the engine to draw")
 m.stored.replace_flash = nil
 
 io.write("the switches switch\n")
-m.stored.enabled = false
-eq(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }), ZONES), ZONES,
-  "the master turns the whole thing off")
-m.stored.enabled = nil
-m.stored.world = false
-eq(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }), ZONES), ZONES,
-  "TINT THE WORLD turns off the world half")
-m.stored.world = nil
-m.stored.psn = false
-local offGame = stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }, 12)
-eq(m.wrapped["render.zones"](same, offGame, ZONES), ZONES,
-  "and POISON off means no tint")
-eq(offGame.overworld.poisonFlash, 12,
-  "with the vanilla flash left alone, since nothing is replacing it")
-m.stored.psn = nil
+local function mapUnder(overrides)
+  for k, v in pairs(overrides) do m.stored[k] = v end
+  local g = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+  g.overworld.sgbWorldZones = worldZones
+  local zones = drawFrame(m, g)
+  for k in pairs(overrides) do m.stored[k] = nil end
+  return zones[1].colors[2][1]
+end
+eq(mapUnder({ enabled = false }), 170, "the master turns the whole thing off")
+eq(mapUnder({ world = false }), 170, "TINT THE WORLD turns off the world half")
+eq(mapUnder({ psn = false }), 170, "and POISON off means no tint")
 
 io.write("the world reacts to what takes HP\n")
-eq(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "BRN" } }), ZONES) ~= ZONES, true,
-  "burn tints by default: it is one of the three HandlePoisonBurnLeechSeed takes HP for")
-io.write("paralysis does not paint the world by default\n")
-eq(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PAR" } }), ZONES), ZONES,
-  "paralysis takes no HP, so DAMAGING leaves it out")
-eq(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "SLP" } }), ZONES), ZONES,
-  "and so does sleep")
-m.stored.world_scope = "poison"
-eq(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "BRN" } }), ZONES), ZONES,
-  "POISON narrows it back to the two poisons")
-m.stored.world_scope = nil
-m.stored.world_scope = "any"
-ok(m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PAR" } }), ZONES) ~= ZONES,
-  "ANY STATUS lets it through")
-m.stored.world_scope = nil
+local function mapFor(status, scope)
+  if scope then m.stored.world_scope = scope end
+  local g = stubGame({ { hp = 20, stats = { hp = 40 }, status = status } })
+  g.overworld.sgbWorldZones = worldZones
+  local zones = drawFrame(m, g)
+  m.stored.world_scope = nil
+  return zones[1].colors[2][1]
+end
+ok(mapFor("BRN") ~= 170,
+  "burn tints: it is one of the three HandlePoisonBurnLeechSeed takes HP for")
+eq(mapFor("PAR"), 170, "paralysis takes no HP, so DAMAGING leaves it out")
+eq(mapFor("SLP"), 170, "and so does sleep")
+eq(mapFor("BRN", "poison"), 170, "POISON narrows it back to the two poisons")
+ok(mapFor("PAR", "any") ~= 170, "and ANY STATUS lets paralysis through")
 
 io.write("a battle is not the overworld\n")
-local battle = stubGame({ { hp = 20, maxHP = 40, status = "PSN" } })
+local battle = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+battle.overworld.sgbWorldZones = worldZones
 battle.stack.states = { {} }   -- the visible base is something else
-eq(m.wrapped["render.zones"](same, battle, ZONES), ZONES,
+local battleMap = drawFrame(m, battle)
+eq(battleMap[1].colors[2][1], 170,
   "the tint stays out of battles, where the HUD already says it")
 
 io.write("a trueColor zone is left alone\n")
-local mixed = { { x = 0, y = 0, w = 8, h = 8, colors = false },
-                ZONES[1] }
-local out = m.wrapped["render.zones"](same,
-  stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }), mixed)
-eq(out[1].colors, false, "the opt-out survives the pass")
-ok(out[2].colors[2][1] > out[2].colors[2][2], "while the zone beside it tints")
+local mixed = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+mixed.overworld.sgbWorldZones = function()
+  return { { x = 0, y = 0, w = 8, h = 8, colors = false },
+           { x = 0, y = 0, w = 320, h = 288,
+             colors = { { 255, 255, 255 }, { 170, 170, 170 },
+                        { 85, 85, 85 }, { 0, 0, 0 } } } }
+end
+local mixedOut = drawFrame(m, mixed)
+eq(mixedOut[1].colors, false, "the opt-out survives the pass")
+ok(mixedOut[2].colors[2][1] > mixedOut[2].colors[2][2],
+  "while the zone beside it tints")
+
+io.write("a map with no zones of its own is left as it is\n")
+local bare = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+bare.overworld.sgbWorldZones = function() return nil end
+eq(drawFrame(m, bare), nil,
+  "nil in, nil out -- nothing is invented in world-canvas space")
 
 -- ------- the stats page
 --

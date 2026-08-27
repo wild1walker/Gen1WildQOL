@@ -214,20 +214,29 @@ return function(mod)
   end
 
   -- ------- the zones
+  --
+  -- There are two zone lists and they are not interchangeable.
+  --
+  -- `render.zones` hands a mod the **UI pass** list -- 160x144 space, the
+  -- menus and text boxes (src/core/Game.lua:684).  The **world pass** takes a
+  -- different list entirely, in world-canvas pixels, which the engine asks the
+  -- overworld for a few lines later:
+  --
+  --     if worldDrawn and self.overworld.sgbWorldZones then
+  --       worldZones = self.overworld:sgbWorldZones()
+  --     end
+  --
+  -- Tinting the hook's list therefore colours the START menu and leaves the
+  -- map alone, which is the exact opposite of the point.  The map is
+  -- `sgbWorldZones`, so that is what this wraps -- the hook is kept only
+  -- because it runs once a frame with the game in hand, immediately before
+  -- that call, which makes it the place to work out what colour the frame
+  -- wants and to swallow the tick.
+  --
+  -- The UI list is handed back untouched.  A tinted menu is not a subtler
+  -- flash, it is a menu that has gone the wrong colour.
 
-  -- With no zones at all the screen is drawn in plain DMG greys, and there is
-  -- nothing to tint until we say what is being tinted: the four greys the
-  -- extracted art actually uses.  PaletteFX names them, so this is the
-  -- engine's own answer rather than four numbers guessed here.
-  local function baseZones(zones)
-    if type(zones) == "table" and zones[1] then return zones, false end
-    local ok, PaletteFX = pcall(require, "src.render.PaletteFX")
-    if not ok or type(PaletteFX) ~= "table"
-        or type(PaletteFX.whole) ~= "function" then
-      return zones, false
-    end
-    return { PaletteFX.whole(PaletteFX.GRAYS) }, true
-  end
+  local pending = nil        -- { key, amount }, set each frame by the hook
 
   local function tintZones(zones, key, amount)
     local out = {}
@@ -248,10 +257,33 @@ return function(mod)
     return out
   end
 
+  -- Wrapped on the instance rather than the class: the overworld is rebuilt on
+  -- a new game and on some warps, and a fresh instance would otherwise arrive
+  -- unwrapped.  The original is parked on the instance so a second pass is a
+  -- no-op instead of a tint applied twice.
+  local WRAPPED = "__statusColoursWorldZones"
+
+  local function wrapWorldZones(world)
+    if type(world) ~= "table" then return end
+    if rawget(world, WRAPPED) then return end
+    local original = world.sgbWorldZones
+    if type(original) ~= "function" then return end
+    rawset(world, WRAPPED, original)
+    world.sgbWorldZones = function(selfWorld, ...)
+      local zones = original(selfWorld, ...)
+      local want = pending
+      if not want or type(zones) ~= "table" or not zones[1] then return zones end
+      return tintZones(zones, want.key, want.amount)
+    end
+  end
+
   mod.hooks:wrap("render.zones", function(next, game, zones)
     local out = next(game, zones)
+    pending = nil
     if not on("enabled") or not on("world") then return out end
     if not overworldIsBase(game) then return out end
+
+    wrapWorldZones(game and game.overworld)
 
     local party = partyOf(game)
     if not party then return out end
@@ -264,10 +296,11 @@ return function(mod)
     local pulse = key and takeFlash(game) or 0
     if not key then return out end
 
-    local amount = Colours.amountFor(opt("depth"), pulse, flashPeak)
-    local base = baseZones(out)
-    if type(base) ~= "table" or not base[1] then return out end
-    return tintZones(base, key, amount)
+    pending = { key = key,
+                amount = Colours.amountFor(opt("depth"), pulse, flashPeak) }
+    -- The UI pass, unchanged.  What the map wears is decided in the wrapper
+    -- above, on the list the map is actually drawn through.
+    return out
   end)
 
   -- What the world is wearing, for anything that wants to agree with it.

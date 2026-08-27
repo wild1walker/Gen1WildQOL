@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.7.1
+
+**The tint was on the wrong surface.** 1.7.0 turned the START menu purple and
+left the map exactly as it was -- the opposite of the feature. Fixed.
+
+The engine keeps two zone lists and they are not interchangeable. The
+`render.zones` hook hands a mod the **UI pass**: 160x144 space, the menus and
+text boxes. The map is drawn through a **different** list, in world-canvas
+pixels, which the engine asks the overworld for a few lines after that hook
+runs:
+
+```lua
+if worldDrawn and self.overworld.sgbWorldZones then
+  worldZones = self.overworld:sgbWorldZones()
+end
+```
+
+So tinting what the hook handed over could only ever colour the menu. The map
+is `sgbWorldZones`, and that is what the feature wraps now. The hook is kept
+because it runs once a frame with the game in hand, immediately before that
+call, which makes it the right place to work out what colour the frame wants
+and to swallow the poison tick -- but the list it hands over goes back
+untouched. A tinted menu is not a subtler flash; it is a menu that has gone the
+wrong colour.
+
+The tests agreed with the bug, which is why it shipped: they asserted the hook's
+list came back tinted, which was exactly the wrong thing to want. They now
+assert both halves -- the UI list comes back *identical*, and the map's list
+carries the colour -- so this cannot come back quietly.
+
+Nothing else moved. The party list, the box and the stats page were always
+right: those screens are drawn in the UI pass, which is the list their own
+zones belong to.
+
+### Known limits of the world tint
+
+- A map whose own zone list is empty or absent gets no tint. That happens under
+  the GBC pack with a full-colour atlas, where there is no four-colour palette
+  to move, and on a map with no palette at all. Nothing is invented in
+  world-canvas space to cover it.
+
 ## 1.7.0
 
 STATUS COLOURS reaches the POKéMON themselves, and the world now reacts to
