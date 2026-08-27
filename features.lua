@@ -233,28 +233,6 @@ return {
       suppress_hooks = { ["ui.options.rows"] = true },
     },
 
-    -- ---- the screen saying what the party is carrying
-    --
-    -- Written here rather than tracked from anywhere: it is this bundle's own
-    -- feature, and maintained/ is where source this repository owns lives.
-
-    {
-      id = "statuscolours",
-      maintained = true,
-      -- After the features that draw over the world, and it does not matter:
-      -- this one takes no draw hook at all.  It moves the colours the frame is
-      -- blitted through, which happens after every mod has finished drawing.
-      priority = 100,
-      dir = "StatusColours",
-      entry = "main.lua",
-      label = "STATUS COLOURS",
-      description = "THE WORLD TINTS PURPLE WHILE A POKEMON IS POISONED, INSTEAD OF THE SCREEN FLASHING BLACK.",
-      -- The feature's own row is the master, the way CAUGHT MARKER's is: one
-      -- switch, live, with nothing to relaunch.
-      enabledKey = "enabled",
-      default = true,
-    },
-
     -- ---- later-generation conveniences
     --
     -- Originally unxpected-uxp's Quality of Life mod, maintained here now

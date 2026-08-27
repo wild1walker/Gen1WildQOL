@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.10.0
+
+**STATUS COLOURS is removed**, at the author's request -- every part of it.
+
+- The feature and its source are gone: no overworld tint, no colour on a
+  POKéMON's picture anywhere, and thirteen rows fewer in this bundle's menu.
+- `mod.exports.statusColours` is gone with it. It existed only to serve this,
+  and nothing else read it.
+- `mod.publish` is gone from the bundle runtime for the same reason. It was
+  added so this feature could hand its table to the party and the box, it never
+  had another caller, and a mechanism with no user is the one that quietly
+  stops working.
+
+Settings a player saved under `STATUS COLOURS` stay in the save as dead keys,
+the way any removed mod's do. Nothing reads them and nothing writes them.
+
+[Gen1Party](https://github.com/wild1walker/Gen1Party) 1.7.0 and
+[Gen1BillsBox](https://github.com/wild1walker/Gen1BillsBox) 1.5.0 drop their
+half in the same pass; both are byte-identical to the releases before the tint
+went in.
+
+Nothing else in this bundle changed. Every other feature is untouched, and the
+runtime is back to exactly what it was before this feature existed.
+
 ## 1.9.0
 
 **The world tint is a colour filter over the finished frame now, which is what
