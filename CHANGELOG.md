@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.10.1
+
+**ALL 151 was switching itself off on every install.** The whole feature: no
+substituted encounters, no version exclusives, no gift or fossil mons, no MEW
+event -- and no LINK CABLE on the Celadon Dept. Store 4F shelf, which is the
+symptom that got it noticed.
+
+The cause was in this repository's build, not in Gen151. `tools/build.py`
+dropped `build.lua` on the way in, along with the rest of what it reads as
+repository furniture. `build.lua` is not furniture: Gen151 loads it at install
+through `mod:read`, and gives up on the feature when it is not there --
+
+```lua
+if not (Rarity and Roll and Build and Placements and Hints) then return end
+```
+
+-- so every copy of the bundle ever built shipped a Gen151 that logged one
+line and returned, while its options row still said ALL 151 was on. Standalone
+[Gen151](https://github.com/wild1walker/Gen151) was never affected; it ships
+its own files.
+
+- `build.lua` and `bench.lua` are no longer excluded, in both bundles. A `.lua`
+  file in a mod's root is mod code. A real build script in these repositories
+  is Python under `tools/`, which the directory and suffix rules already drop.
+- `modules/Gen151/` carries both files again, so ALL 151 installs and the BENCH
+  option has something to switch on.
+- `tools/check.py` grew the check that would have caught it: every Lua file a
+  module names in its own code has to exist in `modules/`. It fails the build
+  rather than leaving a feature to log its way out.
+
+Nothing else changed. No option moved, no save key moved, and no other feature
+is touched.
+
 ## 1.10.0
 
 **STATUS COLOURS is removed**, at the author's request -- every part of it.

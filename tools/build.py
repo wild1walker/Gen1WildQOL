@@ -64,9 +64,19 @@ EXCLUDE_FILES = {
     # repository and commit a gitlink instead of the files.
     ".git", ".gitignore", ".gitattributes", ".gitmodules",
     ".luarc.json", ".modkitignore", ".gen1wild",
-    "mod.card", "manifest.json", "bench.lua", "build.lua",
+    "mod.card", "manifest.json",
     "convert.py", "palettize.py", "recolor.py",
 }
+
+# Not excluded, and worth saying why, because they were: `build.lua` and
+# `bench.lua` read like build furniture and are not.  Gen151 ships both as
+# RUNTIME modules -- main.lua loads build.lua through mod:read and gives up
+# on the whole feature when it is missing (`if not (Rarity and Roll and Build
+# and Placements and Hints) then return end`), so stripping it turned ALL 151
+# off in the bundle while leaving its options row switched on: no spawn layer,
+# and no LINK CABLE on the Celadon 4F shelf.  A .lua file in a mod's root is
+# mod code; a real build script in these repositories is Python under tools/,
+# which EXCLUDE_DIRS and EXCLUDE_SUFFIXES already drop.
 EXCLUDE_SUFFIXES = {".py", ".ps1", ".sh", ".yml", ".yaml"}
 
 # Documentation worth carrying: a licence and an attribution notice travel with
