@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.6.0
+
+New feature: **STATUS COLOURS**, on by default.
+
+**The overworld stops flashing black when a POKéMON is poisoned.** It wears
+purple instead, for as long as the poison lasts, and the tick that takes the HP
+deepens the colour for a moment rather than blacking the screen out. Gen 1's
+flash fires twice every fourth step, for as long as you stay poisoned, and what
+it communicates -- "someone lost a point" -- fits in a colour. The state is now
+visible the whole time instead of announced twice a second, which is gentler to
+look at and strictly more information.
+
+It is a palette change, not an overlay. The feature answers `render.zones`, the
+hook the engine offers for "custom colorization", so the four colours the frame
+is blitted through are what move -- the same thing a Super Game Boy palette
+swap does. Nothing is layered over the picture and nothing is dimmed: the
+screen keeps its full range of light and dark and simply changes hue, so text
+over the map stays exactly as readable as it was.
+
+- **`WORLD REACTS TO`** is `POISON` by default, meaning poison and bad poison.
+  Poison is the condition that is doing something to you while you walk, which
+  is why it is the one the game already interrupts for. `ANY STATUS` opens it
+  to the rest -- worth knowing that paralysis lasts until a town, so that
+  setting will paint the world yellow for a long time to say something no step
+  changes.
+- **`DEPTH`** is `SUBTLE`, `NORMAL` or `STRONG`. Even `STRONG` at the peak of a
+  tick stays well short of opaque; going all the way would be the blackout
+  again in a different colour.
+- **`REPLACE FLASH`** off keeps the resting tint and hands the vanilla flash
+  back, for anyone who wants the colour and still wants to be told.
+- **A row for each state**, all on: `POISON`, `BAD POISON` (deeper purple --
+  Gen 1 keeps Toxic as poison plus a counter, so the colour is what tells them
+  apart), `BURN`, `FREEZE`, `PARALYSIS`, `SLEEP`, `FAINTED GREY` and `LOW HP`.
+  A party carrying several wears the one that matters most: fainted outranks
+  poison, poison outranks the rest, and low HP ranks under every status because
+  a poisoned mon at low HP is poisoned first.
+- `LOW HP` uses a fifth of max HP, the same threshold as the engine's own
+  low-health alarm, so the colour and the sound agree.
+
+### Not in this release
+
+The tint is the **world** only. Colouring a POKéMON's own picture in the dex,
+party and box -- purple when poisoned, grey when fainted -- needs each of those
+screens to say where it drew that POKéMON, and the three that draw them here
+are `Gen1Dex`, `Gen1Party` and `Gen1BillsBox` in the other bundle. The engine's
+two sprite hooks only swap which file is loaded; they cannot tint one. So that
+half is a change to those three mods and it is next, not forgotten. This
+release publishes what the world is wearing through `mod.exports.statusColours`
+so they have one answer to read rather than three copies of this table.
+
 ## 1.5.0
 
 **This bundle no longer puts a row on the game's OPTION screen.** Its settings
