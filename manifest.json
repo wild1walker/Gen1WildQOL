@@ -1,7 +1,7 @@
 {
   "id": "gen1_wild_qol",
   "name": "Gen1WildQOL",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -38,5 +38,5 @@
     "engine_internals"
   ],
   "github": "wild1walker/Gen1WildQOL",
-  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound fixes, followers, all 151 catchable, EXP share and later-generation conveniences, plus the menu layout and mod manager it shares with Gen1WildUI. Every feature switches on and off by itself."
+  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound fixes, a landscape screen profile that follows a phone's rotation, followers, all 151 catchable, EXP share and later-generation conveniences, plus the menu layout and mod manager it shares with Gen1WildUI. Every feature switches on and off by itself."
 }

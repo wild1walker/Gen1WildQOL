@@ -1,10 +1,11 @@
 # Gen1WildQOL
 
 **The quality-of-life half of the [Gen1Wild](https://github.com/wild1walker/Gen1Wild)
-suite, as one mod.** Thirteen features from eleven sources. Nine are still
-their own mods with their own releases, tracked here and not forked; `EXP SHARE`
-and the three later-generation conveniences began as other people's mods and are
-maintained in this repository now.
+suite, as one mod.** Fourteen features: thirteen from eleven sources, and one
+written here. Nine are still their own mods with their own releases, tracked
+here and not forked; `EXP SHARE` and the three later-generation conveniences
+began as other people's mods and are maintained in this repository now.
+`ROTATE PROFILES` is this repository's own.
 
 Its other half is [Gen1WildUI](https://github.com/wild1walker/Gen1WildUI),
 which carries the visual overhauls. The two know about each other: a feature in
@@ -21,6 +22,7 @@ itself. Nothing is all-or-nothing.
 | **AUTO SAVE** | on | [Gen1AutoSave](https://github.com/wild1walker/Gen1AutoSave) |
 | **AUTO CONTINUE** | on | [Gen1AutoContinue](https://github.com/wild1walker/Gen1AutoContinue) |
 | **SOUND** | on | [Gen1SoundQOL](https://github.com/wild1walker/Gen1SoundQOL) |
+| **ROTATE PROFILES** ¶ | on, **WIDE** | written here |
 | **FOLLOWERS** | on | [Gen1Follower](https://github.com/wild1walker/Gen1Follower) |
 | **ALL 151** | on | [Gen151](https://github.com/wild1walker/Gen151) |
 | **EXP SHARE** | on, **GEN 5+** | originally [exp_share](https://github.com/ShaneMcGovernIE/exp_share) ‡ |
@@ -36,6 +38,9 @@ not really quality-of-life or visual — they are the furniture everything else
 is reached through — so both halves carry them and neither loses them. Install
 both bundles and exactly one of them sets it up; see
 [Features in both bundles](#features-in-both-bundles).
+
+¶ Phones and tablets only. Nothing rotates on a desktop or a console, so the
+row is there and inert.
 
 ‡ Maintained in this repository rather than tracked. The source is under
 `maintained/`, edits go straight in, and nothing syncs it from anywhere. The
@@ -55,6 +60,9 @@ OPTION
       SPRINT ON BIKE  OFF
       RESET DEFAULTS
     AUTO SAVE         ON (CONFIGURE)
+    ROTATE PROFILES   ON (CONFIGURE)
+      SIDEWAYS        WIDE
+      RESET DEFAULTS
     AREA BANNER       ON (3 SECONDS)
     ...
 ```
@@ -67,7 +75,7 @@ A row marked `*` needs a relaunch to take effect, and the footer says so. That
 happens for features whose upstream mod has no off switch of its own: the
 bundle gates those at load rather than pretending to switch something that is
 already installed. Features that do have one — SPRINT, AUTO SAVE, AUTO
-CONTINUE, ALL 151, AREA BANNER, CAUGHT MARKER and EASY HM USE
+CONTINUE, ROTATE PROFILES, ALL 151, AREA BANNER, CAUGHT MARKER and EASY HM USE
 — switch live.
 
 ## What is different from the standalone mods
@@ -90,9 +98,57 @@ CONTINUE, ALL 151, AREA BANNER, CAUGHT MARKER and EASY HM USE
   drawn over and clipped itself to `x=88` — where the *vanilla* move panel
   ends. Gen1BattleUI's panel ends at 112, so it lay across that panel's PP
   row. Drawn from inside that mod it simply goes down before the panel does.
+- **`ROTATE PROFILES` is not one of the standalone mods at all.** It was
+  written here, for this bundle. See [Rotating the phone](#rotating-the-phone).
 - **The three remaining Quality of Life features are three rows**, not one
   submenu.
 - **EXP SHARE is configured here**, not on the engine's own OPTIONS screen.
+
+## Rotating the phone
+
+`ROTATE PROFILES` is a second set of screen settings, kept for landscape.
+Turn the phone sideways and they go on; turn it back and the upright ones come
+straight back. It is on iOS and Android only — a desktop window that happens to
+be wide is not a phone held sideways, so the row sits there doing nothing
+everywhere else.
+
+It ships as `SIDEWAYS: WIDE`, which is the widescreen set the engine's own
+`OPTION` screen offers plus the 10:9 lock off:
+
+| Sideways | |
+|---|---|
+| `BATTLE LAYOUT` | `WIDE` |
+| `BATTLE SIZE` | `FILL` |
+| `BATTLE HUD` | `EXTENDED` |
+| `UI LAYOUT` | `DYNAMIC` |
+| `FAITHFUL RATIO` | `OFF` |
+
+`FAITHFUL RATIO` is in there because holding an exact 10:9 is the one setting
+that throws away the width a turned phone has just gained — `WIDE` without it
+would be half a profile.
+
+`SIDEWAYS: CUSTOM` opens a row per setting instead, each shipping as `SAME`,
+which means *leave that one alone*. A profile that is `SAME` all the way down
+does nothing at all, which is what `CUSTOM` starts as. The rows are
+`BATTLE LAYOUT`, `BATTLE SIZE`, `BATTLE HUD`, `UI LAYOUT`, `FAITHFUL RATIO`,
+`UI LETTERBOX` and `SCREEN POS` — the screen and nothing else. Text speed,
+battle style, volumes and the rest of the `OPTION` screen mean the same thing
+in both orientations, so nothing switches them.
+
+Three things it deliberately does not do:
+
+- **It is not an orientation lock.** `ORIENTATION` on the game's own `OPTION`
+  screen decides which way up the game is allowed to be, and this leaves it
+  alone. Lock the game to portrait there and this feature never has anything
+  to do.
+- **It never saves a landscape value.** The profile is put on the live options
+  and taken back off; `options.lua` keeps saying what you set upright, so a
+  phone closed while sideways loses nothing. Anything that saves the options
+  while the profile is on — turning the music down on the `OPTION` screen —
+  writes the upright values too.
+- **It does not lock what it sets.** Change one of the covered rows by hand
+  while the phone is sideways and it stays changed. Turning the phone back is
+  still the picture you set upright.
 
 ## Features in both bundles
 
@@ -240,7 +296,8 @@ luajit tests/runtime_test.lua
 
 ## Credits
 
-Everything here is somebody's work, and mostly not mine. Two of these are
+Everything here is somebody's work, and mostly not mine — `ROTATE PROFILES`
+is the one feature written here rather than adopted. Two of the others are
 maintained in this repository now rather than tracked upstream — that changes
 who looks after the code, not who wrote it:
 

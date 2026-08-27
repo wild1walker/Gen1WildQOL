@@ -34,8 +34,9 @@
 --                manager, which does not know about prefixes
 --   maintained   true when this repository looks after the source itself,
 --                under maintained/<dir>/ rather than as a submodule.  Nothing
---                syncs it; edits go straight in.  It is still somebody else's
---                work by origin, and the credits say so.
+--                syncs it; edits go straight in.  Most of these are still
+--                somebody else's work by origin, and the credits say so;
+--                one, ROTATE PROFILES, was written here.
 --   adapter      a file under adapters/, run after the feature installs
 --   suppress_hooks  engine hooks the feature must not register, because the
 --                bundle surfaces that setting itself
@@ -106,6 +107,29 @@ return {
       -- the whole mod.  So the bundle synthesizes one.
       default = true,
       aliases = { "Gen1SoundQOL", "gen1_sound_qol" },
+    },
+
+    -- ---- the screen
+    --
+    -- The one feature in this bundle that was written here rather than
+    -- adopted from somewhere.  It is not a mod anybody published, because
+    -- what it does only makes sense next to the engine's own screen rows:
+    -- it is a second set of them, kept for landscape, and swapped in while
+    -- the phone is held sideways.
+
+    {
+      id = "rotate",
+      priority = 100,
+      dir = "ScreenRotate",
+      entry = "main.lua",
+      label = "ROTATE PROFILES",
+      description = "TURN THE PHONE SIDEWAYS AND THE SCREEN SETTINGS GO WITH IT. TURN IT BACK AND SO DO THEY.",
+      -- Its own row, read every time the feature acts, so the switch is live
+      -- and OFF puts the upright settings straight back.
+      enabledKey = "enabled",
+      default = true,
+      aliases = { "ScreenRotate" },
+      maintained = true,
     },
 
     -- ---- followers

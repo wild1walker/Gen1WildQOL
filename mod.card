@@ -2,24 +2,32 @@
 -- by the loader's merge.
 return {
   summary = "The quality-of-life half of the Gen1Wild suite in one mod: "
-    .. "sprinting, autosave, auto continue, sound fixes, followers, all 151 "
+    .. "sprinting, autosave, auto continue, sound fixes, a landscape screen "
+    .. "profile that follows a phone's rotation, followers, all 151 "
     .. "catchable, EXP share and later-generation conveniences. Every "
     .. "feature switches on and off by itself.",
   author = "wild1walker",
   contact = "https://github.com/wild1walker/Gen1WildQOL",
   tags = { "quality-of-life", "bundle", "sprint", "autosave", "followers",
-    "exp-share", "collection" },
+    "exp-share", "collection", "mobile" },
   differences = {
     added = {
       "a GEN1WILD QOL row on the OPTION screen: one row per feature, "
         .. "switched on or off there, with that feature's own settings one "
         .. "press of A away",
-      "thirteen features drawn from ten sources. Eight remain their own "
+      "fourteen features: thirteen drawn from eleven sources, and ROTATE "
+        .. "PROFILES, which was written here. Nine remain their own "
         .. "repositories and are pinned here as submodules; EXP SHARE and "
-        .. "the four later-generation conveniences began as other people's "
+        .. "the three later-generation conveniences began as other people's "
         .. "mods and are maintained in this repository now, which changes "
         .. "who looks after the code and not who wrote it -- the credits "
         .. "below stand either way",
+      "ROTATE PROFILES: a second set of screen settings kept for landscape. "
+        .. "Turn an iOS or Android phone sideways and they go on; turn it "
+        .. "back and the upright ones come straight back. Ships as the "
+        .. "widescreen set plus the 10:9 lock off, or a row per setting "
+        .. "under CUSTOM. The screen and nothing else -- and never an "
+        .. "orientation lock, which is the game's own ORIENTATION row",
       "MENU LAYOUT and MOD MANAGER, which Gen1WildUI also carries. They "
         .. "are the furniture every other feature is reached through, so "
         .. "neither half goes without them. With both bundles installed the "
@@ -57,6 +65,10 @@ return {
         .. "features -- is gated at load, so switching it takes effect on "
         .. "the next launch. The menu marks those rows with an asterisk and "
         .. "says so in the footer. The rest are live",
+      "ROTATE PROFILES is inert off a phone or tablet: nothing rotates on a "
+        .. "desktop or a console, so the row is there and does nothing. It "
+        .. "never saves a landscape value either -- options.lua keeps saying "
+        .. "what the player set upright",
       "installing this alongside any of the eight mods it is built from is "
         .. "a conflict, and the manifest declares it: they would both "
         .. "install the same hooks",

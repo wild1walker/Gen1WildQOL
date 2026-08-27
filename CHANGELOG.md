@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.11.0
+
+**New: `ROTATE PROFILES`** — a second set of screen settings, kept for
+landscape. Turn an iPhone or an Android phone sideways and they go on; turn it
+back and the upright ones come straight back. iOS and Android only: a desktop
+window that happens to be wide is not a phone held sideways, so the row is
+there and inert everywhere else.
+
+It is the first feature in this bundle that was not adopted from somewhere.
+There was no standalone mod to track, because what it does only makes sense
+next to the engine's own screen rows — it is a second set of them.
+
+Ships as `SIDEWAYS: WIDE`, which is the widescreen set the engine's own
+`OPTION` screen offers plus the 10:9 lock off: `BATTLE LAYOUT WIDE`,
+`BATTLE SIZE FILL`, `BATTLE HUD EXTENDED`, `UI LAYOUT DYNAMIC`,
+`FAITHFUL RATIO OFF`. `FAITHFUL RATIO` is in the preset because holding an
+exact 10:9 is the one setting that throws away the width a turned phone has
+just gained.
+
+`SIDEWAYS: CUSTOM` opens a row per setting instead — `BATTLE LAYOUT`,
+`BATTLE SIZE`, `BATTLE HUD`, `UI LAYOUT`, `FAITHFUL RATIO`, `UI LETTERBOX`,
+`SCREEN POS` — each shipping as `SAME`, which means leave that one alone. So
+`CUSTOM` starts as a profile that does nothing, and stays that way until a row
+is set.
+
+The screen and nothing else. Text speed, battle style, volumes, the ruleset
+and the rest of the `OPTION` screen mean the same thing in both orientations,
+so nothing switches them.
+
+Three things it deliberately does not do:
+
+- **It is not an orientation lock.** `ORIENTATION` on the game's own `OPTION`
+  screen still decides which way up the game is allowed to be, and this leaves
+  it alone. Locked to portrait there, this feature never has anything to do.
+- **It never saves a landscape value.** The profile goes onto the live options
+  table and comes back off it; `options.lua` keeps saying what the player set
+  upright, so a phone killed while sideways loses nothing. Anything that saves
+  the options while the profile is on — turning the music down on the `OPTION`
+  screen — writes the upright values for the covered rows, not the landscape
+  ones.
+- **It does not lock what it sets.** A covered row changed by hand while the
+  phone is sideways stays changed; only a rotation or an edit to the profile
+  itself writes. Turning the phone back is still the picture set upright.
+
+The display is measured five times a second from `core.update`, and only the
+settings that actually changed are pushed at the engine — `FAITHFUL RATIO`,
+`UI LETTERBOX` and `SCREEN POS` are live module state; the battle and UI
+layouts are read out of `save.options` where they are used, so writing the
+option is the whole of setting them. Deliberately not `Game:applyOptions`,
+which would re-push the palette, the shader chain, the music and the input
+bindings as well, none of which a rotation has anything to say about.
+
+Nothing else changed.
+
 ## 1.10.0
 
 **STATUS COLOURS is removed**, at the author's request -- every part of it.

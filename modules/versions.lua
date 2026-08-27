@@ -13,4 +13,5 @@ return {
   ["Gen1SoundQOL"] = "0.3.0",
   ["Gen1Sprint"] = "0.2.0",
   ["QualityOfLife"] = "maintained",
+  ["ScreenRotate"] = "maintained",
 }
