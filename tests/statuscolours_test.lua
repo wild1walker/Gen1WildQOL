@@ -377,14 +377,14 @@ do
   m.stored.enabled = nil
 end
 
-io.write("the stats page tints the picture and not the page\n")
+io.write("the stats page paints the picture and not the page\n")
 local registered
 local function stubModWithScreens()
-  local m = stubMod()
-  m.content = { screens = { register = function(_, id, record)
+  local mm = stubMod()
+  mm.content = { screens = { register = function(_, id, record)
     registered = { id = id, record = record }
   end } }
-  return m
+  return mm
 end
 do
   local chunk = assert(loadfile("modules/StatusColours/main.lua"))
@@ -393,38 +393,46 @@ do
   ok(registered ~= nil, "a screen is registered")
   eq(registered and registered.id, "SummaryMenu", "under the engine's own id")
 
-  local WHOLE = { x = 0, y = 0, w = 160, h = 144,
-                  colors = { { 255, 255, 255 }, { 170, 170, 170 },
-                             { 85, 85, 85 }, { 0, 0, 0 } } }
-  local PIC = { x = 8, y = 0, w = 56, h = 56,
-                colors = { { 255, 255, 255 }, { 170, 170, 170 },
-                           { 85, 85, 85 }, { 0, 0, 0 } } }
+  -- what SummaryMenu answers: an HP-bar palette over the whole screen, plus
+  -- one zone over the picture.  The picture's rect is read back from that
+  -- rather than hard-coded, so the engine can move it.
+  local WHOLE = { x = 0, y = 0, w = 160, h = 144, colors = {} }
+  local PIC = { x = 8, y = 0, w = 56, h = 56, colors = {} }
   local Builtin = {}
   Builtin.__index = Builtin
   function Builtin.new(_, mon)
-    local self = setmetatable({ mon = mon }, Builtin)
+    local self = setmetatable({ mon = mon, game = {}, drew = 0 }, Builtin)
     self.sgbPalettes = function() return { WHOLE, PIC } end
+    self.draw = function(me) me.drew = me.drew + 1 end
     return self
   end
 
+  local painted = stubGraphics()
+  m2.__graphics = painted
   local saved = package.loaded["src.ui.SummaryMenu"]
   package.loaded["src.ui.SummaryMenu"] = Builtin
   local poisoned = registered.record.new({},
     { hp = 20, stats = { hp = 40 }, status = "PSN" })
-  local zones = poisoned:sgbPalettes({})
+  poisoned:draw()
   package.loaded["src.ui.SummaryMenu"] = saved
 
-  eq(zones[1].colors, WHOLE.colors, "the full-screen bar palette is left alone")
-  ok(zones[2].colors ~= PIC.colors, "the picture's zone is replaced")
-  ok(zones[2].colors[2][1] > zones[2].colors[2][2], "and wears the purple")
-  eq(zones[2].x, PIC.x, "the rect is untouched")
-  eq(PIC.colors[2][1], 170, "and the engine's table was not written through")
+  eq(poisoned.drew, 1, "the engine's own draw still runs, exactly once")
+  eq(#painted.calls, 1, "one rectangle is painted")
+  eq(painted.calls[1].x, 8, "over the picture's own rect")
+  eq(painted.calls[1].w, 56, "at its width")
+  eq(painted.calls[1].h, 56, "and its height")
+  ok(painted.calls[1].colour[1] > painted.calls[1].colour[2],
+    "in the purple")
+  eq(painted.calls[1].blend[1], "multiply",
+    "multiplied, so the picture keeps its own light and dark")
 
+  painted = stubGraphics()
+  m2.__graphics = painted
   package.loaded["src.ui.SummaryMenu"] = Builtin
   local healthy = registered.record.new({}, { hp = 40, stats = { hp = 40 } })
-  local plain = healthy:sgbPalettes({})
+  healthy:draw()
   package.loaded["src.ui.SummaryMenu"] = saved
-  eq(plain[2].colors, PIC.colors, "a healthy POKeMON's picture is untinted")
+  eq(#painted.calls, 0, "a healthy POKeMON's picture is painted over not at all")
 end
 
 -- ------- through the whole bundle

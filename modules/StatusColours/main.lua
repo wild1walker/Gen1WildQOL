@@ -253,7 +253,7 @@ return function(mod)
     return mod.__graphics or (love and love.graphics)
   end
 
-  local function paint(g, key, amount)
+  local function paint(g, key, amount, x, y, w, h)
     local entry = Colours.entry(key)
     if not entry then return end
     -- White is "no change" under multiply.  A tint pulls the three channels
@@ -272,7 +272,7 @@ return function(mod)
     g.push("all")
     g.setBlendMode("multiply", "premultiplied")
     g.setColor(c[1], c[2], c[3], 1)
-    g.rectangle("fill", 0, 0, WORLD_W, WORLD_H)
+    g.rectangle("fill", x or 0, y or 0, w or WORLD_W, h or WORLD_H)
     g.pop()
   end
 
@@ -406,11 +406,16 @@ return function(mod)
   -- party -- so there is no status there to show.  RATTATA is not poisoned;
   -- your RATTATA is.
   --
-  -- Only the screen's palette method is replaced, and only the zones that are
-  -- not the whole screen: SummaryMenu answers with a full-screen HP-bar
-  -- palette plus one zone over the picture, and the picture is the half that
-  -- should wear the condition.  Everything else about the screen is the
-  -- engine's, untouched.
+  -- Painted, not palette-shifted, for the reason the world tint is: a picture
+  -- drawn from full-colour art sits the shade-remap pass out by design, so a
+  -- palette zone colours nothing for anyone running such a pack.
+  --
+  -- The rect is not hard-coded.  The screen already answers sgbPalettes with
+  -- an HP-bar palette over the whole screen plus one zone over the picture --
+  -- so the picture's rect is the one zone that is not the whole screen, and
+  -- reading it back means the engine can move the picture without this having
+  -- an opinion about where it went.  It is also why the HP bar is untouched:
+  -- that is the whole-screen entry, and it is skipped.
   local function tintSummary()
     if not (mod.content and mod.content.screens) then return end
     local ok, err = pcall(function()
@@ -422,35 +427,32 @@ return function(mod)
             error("statuscolours: no builtin summary screen to decorate", 0)
           end
           local state = Builtin.new(game, ...)
-          local inherited = state.sgbPalettes
-              or (Builtin.sgbPalettes and function(self, g)
-                    return Builtin.sgbPalettes(self, g)
-                  end)
-          if type(inherited) ~= "function" then return state end
-          state.sgbPalettes = function(self, g)
-            local zones = inherited(self, g)
-            if not on("enabled") or type(zones) ~= "table" then return zones end
+          local palettes = state.sgbPalettes or Builtin.sgbPalettes
+          local drawn = state.draw or Builtin.draw
+          if type(palettes) ~= "function" or type(drawn) ~= "function" then
+            return state
+          end
+          state.draw = function(self, ...)
+            local result = drawn(self, ...)
+            if not on("enabled") then return result end
             local monster = self.mon
             local key = monster and Colours.keyFor(monster,
               on("lowhp") and LOW_HP_FRACTION or nil)
-            if not key or not on(key) then return zones end
+            if not key or not on(key) then return result end
+            local g = graphics()
+            if not g then return result end
+            local gotZones, zones = pcall(palettes, self, self.game)
+            if not gotZones or type(zones) ~= "table" then return result end
             local amount = Colours.amountFor(opt("depth"))
-            local out = {}
             for i = 1, #zones do
               local zone = zones[i]
-              local whole = type(zone) == "table"
-                and (zone.w or 0) >= 160 and (zone.h or 0) >= 144
-              if type(zone) ~= "table" or zone.colors == nil
-                  or zone.colors == false or whole then
-                out[i] = zone
-              else
-                local tinted = {}
-                for k, v in pairs(zone) do tinted[k] = v end
-                tinted.colors = Colours.apply(zone.colors, key, amount)
-                out[i] = tinted
+              if type(zone) == "table" and zone.w and zone.h
+                  and not (zone.w >= 160 and zone.h >= 144) then
+                pcall(paint, g, key, amount, zone.x or 0, zone.y or 0,
+                      zone.w, zone.h)
               end
             end
-            return out
+            return result
           end
           return state
         end,

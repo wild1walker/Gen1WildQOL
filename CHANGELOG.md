@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.1
+
+The stats page picture is **painted** rather than palette-shifted, which closes
+the last surface that only tinted for four-colour art. Every place STATUS
+COLOURS colours something now works the same way, and works whatever your
+`COLORS` mode and whatever art you have installed.
+
+The rect is not hard-coded. `SummaryMenu:sgbPalettes` already answers with an
+HP-bar palette over the whole screen plus one zone over the picture, so the
+picture's rect is the one zone that is *not* the whole screen. Reading it back
+from the screen itself means the engine can move the picture without this
+having an opinion about where it went -- and it is also why the HP bar is left
+alone: that is the whole-screen entry, and it is skipped.
+
+The engine's own draw still runs first and in full; this only paints over the
+rect afterwards.
+
 ## 1.8.0
 
 Publishes the condition as a **draw colour**, so the party list and the box can
