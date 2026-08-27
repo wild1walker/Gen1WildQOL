@@ -352,6 +352,31 @@ m.__graphics = stubGraphics()
 -- plus one zone over the picture; only the picture should wear the condition,
 -- or the whole page turns purple and the bar stops meaning what it means.
 
+io.write("the condition as a draw colour\n")
+do
+  local api = m.exports.statusColours
+  eq(api.drawColour({ hp = 40, stats = { hp = 40 } }), nil,
+    "a healthy POKeMON is drawn as it is")
+  local psn = api.drawColour({ hp = 20, stats = { hp = 40 }, status = "PSN" })
+  ok(psn ~= nil, "a poisoned one gets a colour")
+  ok(psn[1] > psn[2] and psn[3] > psn[2],
+    "with red and blue above green -- the purple")
+  ok(psn[1] <= 1 and psn[2] > 0,
+    "inside the multiply range, so the art keeps its own light and dark")
+  local out = api.drawColour({ hp = 0, stats = { hp = 40 } })
+  eq(out[1], out[2], "a fainted one drains instead: red meets green")
+  eq(out[2], out[3], "and green meets blue")
+  ok(out[1] < 1, "and it is pulled down from white")
+  m.stored.psn = false
+  eq(api.drawColour({ hp = 20, stats = { hp = 40 }, status = "PSN" }), nil,
+    "a row switched off means no colour, so the screens draw it as it is")
+  m.stored.psn = nil
+  m.stored.enabled = false
+  eq(api.drawColour({ hp = 20, stats = { hp = 40 }, status = "PSN" }), nil,
+    "and the master turns it off everywhere at once")
+  m.stored.enabled = nil
+end
+
 io.write("the stats page tints the picture and not the page\n")
 local registered
 local function stubModWithScreens()

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.8.0
+
+Publishes the condition as a **draw colour**, so the party list and the box can
+tint a POKéMON whose art is full-colour.
+
+The tint on a POKéMON's picture rode a palette zone, and a palette zone reaches
+only art that goes through the shade-remap pass. A full-colour icon or sprite
+pack sits that pass out **by design** -- Gen1Party marks its rect trueColor
+precisely so the pass does not repaint it off its red channel -- so the tint
+found nothing to colour for anyone running one. Same shape of mistake as the
+world tint in 1.7.2, one layer up.
+
+`mod.exports.statusColours.drawColour(mon)` answers with the colour to set
+before drawing, or nil for "draw it as it is". Multiplied by the art, so white
+is untouched and the colour shifts the hue while keeping the art's own light and
+dark. [Gen1Party](https://github.com/wild1walker/Gen1Party) 1.6.0 and
+[Gen1BillsBox](https://github.com/wild1walker/Gen1BillsBox) 1.4.0 use it.
+
+It lives here rather than in each screen so the three surfaces keep agreeing --
+and so the arithmetic is under test in one place instead of copied twice.
+
+The stats page still tints through its palette zone. That screen's picture is
+the engine's own draw and there is no seam to set a colour around just the
+picture, so under a full-colour sprite pack it stays untinted.
+
 ## 1.7.2
 
 **The world tint now works in every colour mode.** 1.7.0 and 1.7.1 both built it

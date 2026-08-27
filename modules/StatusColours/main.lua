@@ -352,6 +352,35 @@ return function(mod)
       return Colours.apply(colors, key, amount or Colours.amountFor(opt("depth")))
     end,
     depth = function() return Colours.amountFor(opt("depth")) end,
+    -- The condition as a DRAW colour: what to set before drawing a POKeMON so
+    -- the picture wears it.  Multiplied by the art, so white is untouched and
+    -- a colour lerped toward the tint shifts the hue while keeping the art's
+    -- own light and dark.
+    --
+    -- This exists because a palette zone cannot do the job everywhere.  Zones
+    -- reach only art that goes through the shade-remap pass, and full-colour
+    -- icon and sprite packs sit that pass out by design -- so the party and
+    -- the box tinted nothing at all for anyone running one.  A draw colour
+    -- reaches both, and living here rather than in each screen means the three
+    -- of them keep agreeing.
+    --
+    -- nil means "draw it as it is": no condition, or its row switched off.
+    drawColour = function(monster)
+      local key = Colours.keyFor(monster,
+        on("lowhp") and LOW_HP_FRACTION or nil)
+      if not key or not on("enabled") or not on(key) then return nil end
+      local entry = Colours.entry(key)
+      if not entry then return nil end
+      local amount = Colours.amountFor(opt("depth"))
+      if entry.desaturate then
+        local grey = 1 - amount * 0.45
+        return { grey, grey, grey }
+      end
+      local t = entry.tint
+      return { 1 - amount * (1 - t[1] / 255),
+               1 - amount * (1 - t[2] / 255),
+               1 - amount * (1 - t[3] / 255) }
+    end,
     -- Whether the feature is doing anything at all, so a caller can skip the
     -- work rather than apply a tint of zero.
     active = function() return on("enabled") end,
