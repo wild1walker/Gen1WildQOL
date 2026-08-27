@@ -202,181 +202,134 @@ ok(#m.defined == 13, "with a row for every switch (" .. tostring(#m.defined) .. 
 eq(m.defined[1].key, "enabled", "and the master first, which features.lua donates")
 eq(m.defined[3].default, "damaging",
   "WORLD REACTS TO defaults to the statuses that take HP")
-ok(m.wrapped["render.zones"] ~= nil, "it wraps render.zones")
+ok(m.wrapped["render.hud"] ~= nil,
+  "it wraps render.hud -- the engine's own draw-over-the-finished-frame hook")
 ok(type(m.exports.statusColours) == "table", "and publishes what it is wearing")
 
 -- ------- how the colour reaches the screen
 --
--- Two mechanisms were tried and only the second works for everyone.  Palette
--- zones -- render.zones and sgbWorldZones -- are the SGB shade-remap path, and
--- a map drawn from a full-colour GBC atlas has no four-colour palette to move:
--- sgbWorldZones returns an empty list outright under RED++.  So the tint is
--- drawn instead, the way the flash it replaces is drawn, on the end of the
--- overworld's own draw where it lands over the map and under every state
--- stacked above it.
+-- Three mechanisms were tried; only the third is visible in the game.  Palette
+-- zones cannot touch a map drawn from a full-colour atlas, and a rectangle
+-- inside the overworld's own draw did not survive the composite.  This one is
+-- a filter over the FINISHED frame -- render.hud, the engine's own "draw over
+-- the completed render pipeline" -- so there is no canvas to guess at and no
+-- colour mode that can opt out of it.
 --
--- The graphics table is injected, so what would have been painted can be
--- asserted without a window.
+-- The graphics table is injected, so what would be drawn can be asserted
+-- without a window.
 
 local function stubGraphics()
-  local g = { calls = {}, colour = nil, blend = nil, depth = 0 }
+  local g = { calls = {}, depth = 0 }
   function g.push() g.depth = g.depth + 1 end
   function g.pop() g.depth = g.depth - 1 end
+  function g.setShader() g.shader = "cleared" end
   function g.setBlendMode(mode, alpha) g.blend = { mode, alpha } end
   function g.setColor(r, gr, b, a) g.colour = { r, gr, b, a } end
   function g.rectangle(mode, x, y, w, h)
     g.calls[#g.calls + 1] = { mode = mode, x = x, y = y, w = w, h = h,
-                              colour = g.colour, blend = g.blend }
+                              colour = g.colour, blend = g.blend,
+                              shader = g.shader }
   end
   return g
 end
 
+-- what the engine hands render.hud: the playfield's geometry in screen space
+local VIEW = { width = 800, height = 720, gameX = 40, gameY = 24,
+               gameWidth = 720, gameHeight = 648, scale = 4.5 }
+
 local function frame(mod, game)
-  -- the order the engine runs them in: the zones hook, then the world's draw
-  mod.wrapped["render.zones"](same, game, ZONES)
-  local world = game.overworld
-  if type(world.draw) == "function" then world:draw() end
-  return mod.__graphics.calls
+  return mod.wrapped["render.hud"](function() end, game, VIEW)
 end
 
-local function withWorld(party, flash)
-  local game = stubGame(party, flash)
-  game.overworld.draw = function() end
-  return game
-end
-
-io.write("the tint is painted over the world\n")
+io.write("the filter is drawn over the finished frame\n")
 m.__graphics = stubGraphics()
-local poisoned = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
-local ui = m.wrapped["render.zones"](same, poisoned, ZONES)
-eq(ui, ZONES, "the zone list is handed back untouched -- palettes are not the seam")
-poisoned.overworld:draw()
+frame(m, stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }))
 local calls = m.__graphics.calls
-eq(#calls, 1, "one rectangle is painted")
-eq(calls[1].w, 160, "the width of the world")
-eq(calls[1].h, 144, "and its height")
-eq(calls[1].blend[1], "alpha",
-  "alpha-blended, the way the flash it replaces is -- a multiply showed nothing here")
+eq(#calls, 1, "one rectangle")
+eq(calls[1].x, 40, "at the playfield's own x, not the window's")
+eq(calls[1].y, 24, "and its y")
+eq(calls[1].w, 720, "across the playfield's width")
+eq(calls[1].h, 648, "and its height, so margins and the pad are untouched")
+eq(calls[1].blend[1], "alpha", "alpha-blended, like the flash it replaces")
+eq(calls[1].shader, "cleared",
+  "with any shader the pipeline left bound cleared first")
 ok(calls[1].colour[1] > calls[1].colour[2],
-  "and the colour pulls red above green -- the purple")
+  "the colour pulls red above green -- the purple")
 ok(calls[1].colour[3] > calls[1].colour[2], "with blue above it too")
 ok(calls[1].colour[4] > 0 and calls[1].colour[4] < 0.5,
   "at an alpha under the 0.45 the vanilla flash uses, so it never blacks out")
 eq(m.__graphics.depth, 0, "push and pop are balanced, so no state leaks out")
 
-io.write("a healthy party paints nothing\n")
+io.write("a healthy party draws nothing\n")
 m.__graphics = stubGraphics()
-eq(#frame(m, withWorld({ { hp = 40, stats = { hp = 40 } } })), 0,
-  "no rectangle at all")
-
-io.write("wrapping happens once\n")
-m.__graphics = stubGraphics()
-local twice = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
-frame(m, twice)
-frame(m, twice)
-eq(#m.__graphics.calls, 2, "two frames paint two rectangles, not four")
+frame(m, stubGame({ { hp = 40, stats = { hp = 40 } } }))
+eq(#m.__graphics.calls, 0, "no rectangle at all")
 
 io.write("the tick is swallowed and replaced\n")
 m.__graphics = stubGraphics()
-local ticking = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 12)
+local ticking = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 12)
 frame(m, ticking)
 eq(ticking.overworld.poisonFlash, 0,
   "the engine's flash counter is taken to zero, so no black frame is drawn")
 local deep = m.__graphics.calls[1].colour[4]
 m.__graphics = stubGraphics()
-frame(m, withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }))
-local rest = m.__graphics.calls[1].colour[4]
-ok(deep > rest, "and the tick's frame is deeper than the resting tint")
+frame(m, stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }))
+ok(deep > m.__graphics.calls[1].colour[4],
+  "and the tick's frame is deeper than the resting tint")
 
 io.write("REPLACE FLASH off hands the flash back\n")
 m.stored.replace_flash = false
 m.__graphics = stubGraphics()
-local kept = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 12)
+local kept = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 12)
 frame(m, kept)
 eq(kept.overworld.poisonFlash, 12, "the counter is left for the engine to draw")
 m.stored.replace_flash = nil
 
 io.write("the switches switch\n")
-local function paintedUnder(overrides, status)
+local function drawnUnder(overrides, status)
   for k, v in pairs(overrides) do m.stored[k] = v end
   m.__graphics = stubGraphics()
-  local n = #frame(m, withWorld({ { hp = 20, stats = { hp = 40 },
-                                    status = status or "PSN" } }))
+  frame(m, stubGame({ { hp = 20, stats = { hp = 40 },
+                        status = status or "PSN" } }))
+  local n = #m.__graphics.calls
   for k in pairs(overrides) do m.stored[k] = nil end
   return n
 end
-eq(paintedUnder({ enabled = false }), 0, "the master turns the whole thing off")
-eq(paintedUnder({ world = false }), 0, "TINT THE WORLD turns off the world half")
-eq(paintedUnder({ psn = false }), 0, "and POISON off means no tint")
+eq(drawnUnder({ enabled = false }), 0, "the master turns the whole thing off")
+eq(drawnUnder({ world = false }), 0, "TINT THE WORLD turns off the world half")
+eq(drawnUnder({ psn = false }), 0, "and POISON off means no tint")
 
 io.write("the world reacts to what takes HP\n")
-eq(paintedUnder({}, "BRN"), 1,
-  "burn paints: it is one of the three HandlePoisonBurnLeechSeed takes HP for")
-eq(paintedUnder({}, "PAR"), 0, "paralysis takes no HP, so DAMAGING leaves it out")
-eq(paintedUnder({}, "SLP"), 0, "and so does sleep")
-eq(paintedUnder({ world_scope = "poison" }, "BRN"), 0,
+eq(drawnUnder({}, "BRN"), 1,
+  "burn draws: it is one of the three HandlePoisonBurnLeechSeed takes HP for")
+eq(drawnUnder({}, "PAR"), 0, "paralysis takes no HP, so DAMAGING leaves it out")
+eq(drawnUnder({}, "SLP"), 0, "and so does sleep")
+eq(drawnUnder({ world_scope = "poison" }, "BRN"), 0,
   "POISON narrows it back to the two poisons")
-eq(paintedUnder({ world_scope = "any" }, "PAR"), 1,
+eq(drawnUnder({ world_scope = "any" }, "PAR"), 1,
   "and ANY STATUS lets paralysis through")
 
 io.write("a battle is not the overworld\n")
 m.__graphics = stubGraphics()
-local battle = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
+local battle = stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
 battle.stack.states = { {} }   -- the visible base is something else
-eq(#frame(m, battle), 0,
-  "nothing is wrapped, so the map behind a battle is left alone")
+frame(m, battle)
+eq(#m.__graphics.calls, 0,
+  "the filter stays out of battles, where the HUD already says it")
 
 io.write("a host with no graphics stands down quietly\n")
 m.__graphics = false
-local headless = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
-m.wrapped["render.zones"](same, headless, ZONES)
-ok(pcall(function() headless.overworld:draw() end),
-  "the draw still returns rather than throwing")
+ok(pcall(frame, m, stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })),
+  "the hook still returns rather than throwing")
 m.__graphics = stubGraphics()
 
-io.write("a graphics table that throws is stood down from, once\n")
+io.write("a graphics table that throws is survived\n")
 local angry = stubGraphics()
 angry.rectangle = function() error("no context") end
 m.__graphics = angry
-local hostile = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })
-m.wrapped["render.zones"](same, hostile, ZONES)
-ok(pcall(function() hostile.overworld:draw() end),
-  "the first frame survives the failure")
-ok(pcall(function() hostile.overworld:draw() end),
-  "and so does the next, with the wrapper removed rather than retried")
+ok(pcall(frame, m, stubGame({ { hp = 20, stats = { hp = 40 }, status = "PSN" } })),
+  "the frame survives the failure")
 m.__graphics = stubGraphics()
-
--- ------- the stats page
---
--- The one screen where a POKeMON's full picture is shown with its status
--- printed beside it.  SummaryMenu answers with a full-screen HP-bar palette
--- plus one zone over the picture; only the picture should wear the condition,
--- or the whole page turns purple and the bar stops meaning what it means.
-
-io.write("the condition as a draw colour\n")
-do
-  local api = m.exports.statusColours
-  eq(api.drawColour({ hp = 40, stats = { hp = 40 } }), nil,
-    "a healthy POKeMON is drawn as it is")
-  local psn = api.drawColour({ hp = 20, stats = { hp = 40 }, status = "PSN" })
-  ok(psn ~= nil, "a poisoned one gets a colour")
-  ok(psn[1] > psn[2] and psn[3] > psn[2],
-    "with red and blue above green -- the purple")
-  ok(psn[1] <= 1 and psn[2] > 0,
-    "inside the multiply range, so the art keeps its own light and dark")
-  local out = api.drawColour({ hp = 0, stats = { hp = 40 } })
-  eq(out[1], out[2], "a fainted one drains instead: red meets green")
-  eq(out[2], out[3], "and green meets blue")
-  ok(out[1] < 1, "and it is pulled down from white")
-  m.stored.psn = false
-  eq(api.drawColour({ hp = 20, stats = { hp = 40 }, status = "PSN" }), nil,
-    "a row switched off means no colour, so the screens draw it as it is")
-  m.stored.psn = nil
-  m.stored.enabled = false
-  eq(api.drawColour({ hp = 20, stats = { hp = 40 }, status = "PSN" }), nil,
-    "and the master turns it off everywhere at once")
-  m.stored.enabled = nil
-end
 
 io.write("the stats page shifts the picture's palette, and paints nothing\n")
 local registered
@@ -490,24 +443,23 @@ do
   ok(registry ~= nil and registry.features ~= nil, "features.lua loads")
   Bundle.install(bundleMod, registry.spec, registry.features)
 
-  ok(bundleMod.hooked["render.zones"] ~= nil,
+  ok(bundleMod.hooked["render.hud"] ~= nil,
     "the bundle's install reaches the feature and it takes its hook")
   ok(type(bundleMod.exports.statusColours) == "table",
     "and publishes its table on the bundle's own exports, where mod.find looks")
 
   local painted = stubGraphics()
   bundleMod.__graphics = painted
-  local world = { poisonFlash = 0, isOpaque = true, draw = function() end }
+  local world = { poisonFlash = 0, isOpaque = true }
   local stack = { states = { world } }
   function stack:visibleBase() return 1 end
   local game = { save = { party = { { hp = 3, stats = { hp = 45 },
                                       status = "PSN" } } },
                  overworld = world, stack = stack }
 
-  bundleMod.hooked["render.zones"](function(_, z) return z end, game, nil)
-  world:draw()
-  eq(#painted.calls, 1, "a poisoned party paints one rectangle over the world")
-  eq(painted.calls[1].w, 160, "at the width of the world")
+  bundleMod.hooked["render.hud"](function() end, game, VIEW)
+  eq(#painted.calls, 1, "a poisoned party draws one rectangle over the frame")
+  eq(painted.calls[1].w, VIEW.gameWidth, "across the playfield")
   ok(painted.calls[1].colour[1] > painted.calls[1].colour[2],
     "in the purple")
 end

@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.9.0
+
+**The world tint is a colour filter over the finished frame now, which is what
+it should have been from the start.**
+
+Three mechanisms have been tried and the first two were invisible in the game
+while being correct against the seam they used:
+
+1. **SGB palette zones.** A map drawn from a full-colour GBC atlas has no
+   four-colour palette to shift -- `sgbWorldZones` returns an empty list
+   outright under RED++ -- so there was nothing to tint.
+2. **A rectangle inside the overworld's own draw.** The overworld draws into a
+   canvas of its own and the multiply did not survive the composite.
+
+Both went *through* the rendering. This goes **over** it. `render.hud` is the
+engine's own hook for "draw over the completed render pipeline"
+(`src/core/Game.lua:699`): it runs after every pass, in screen space, and is
+handed the playfield's exact geometry. So there is no canvas to guess at, no
+blend mode to match, and no colour mode that can opt out of it -- a coloured
+lens over the picture rather than a change to how the picture is made.
+
+It covers the playfield only. The margins and the on-screen pad are untouched,
+because the viewport says where the game actually is.
+
+Unchanged: it is still off in battles and under a full-screen menu, still
+swallows the poison tick's black flash and deepens instead, and still tops out
+near the 0.45 alpha the vanilla flash used, so the strongest it gets is about
+as strong as the thing it replaced.
+
+### Still true, and still the one gap
+
+A POKéMON's own picture on the **stats page** tints through the picture's
+palette, which a full-colour sprite pack sits out by design. Painting a
+rectangle there was tried in 1.8.1 and reverted: the zone covers the picture
+*well*, so it turned the white square behind the POKéMON into a lavender block.
+The party list and the box do not have this problem -- they tint the icon at
+draw time, through
+[Gen1Party](https://github.com/wild1walker/Gen1Party) 1.6.0 and
+[Gen1BillsBox](https://github.com/wild1walker/Gen1BillsBox) 1.4.0, which need
+**Gen1WildUI 1.8.1 or later** installed.
+
 ## 1.8.2
 
 Two fixes, and the second undoes something 1.8.1 got wrong.

@@ -219,127 +219,83 @@ return function(mod)
 
   -- ------- how the colour reaches the screen
   --
-  -- Not through palettes.  That was the first attempt and it cannot work for
-  -- everyone: `render.zones` and `sgbWorldZones` are the SGB shade-remap path,
-  -- and a map drawn from a full-colour GBC atlas has no four-colour palette to
-  -- move -- `OverworldState:sgbWorldZones` returns an empty list outright when
-  -- `PaletteFX.usesGbcPack()` and the map has a `gbcAtlas`.  Under RED++ the
-  -- tint simply had nothing to bite on, and the screen stayed exactly as it
-  -- was.
+  -- A colour filter over the finished frame, which is what this always should
+  -- have been.  Two earlier attempts went through the rendering rather than
+  -- over it and both failed in the same way -- they were correct against the
+  -- seam they used and invisible in the game:
   --
-  -- So it is drawn, which is what the thing it replaces does.  The engine's
-  -- own poison flash is a rectangle over the world:
+  --   * SGB palette zones.  A map drawn from a full-colour GBC atlas has no
+  --     four-colour palette to shift; sgbWorldZones returns an empty list
+  --     outright under RED++, so there was nothing to tint.
+  --   * A rectangle inside the overworld's own draw, multiplied.  The
+  --     overworld draws into a canvas of its own and the multiply did not
+  --     survive the composite.
   --
-  --     love.graphics.setColor(0, 0, 0, 0.45)
-  --     love.graphics.rectangle("fill", 0, 0, 160, 144)
+  -- `render.hud` is the engine's own answer to "draw over the completed render
+  -- pipeline" (src/core/Game.lua:699).  It runs after every pass, in screen
+  -- space, with the playfield's exact geometry handed over -- so there is no
+  -- canvas to guess at, no blend mode to match, and no colour mode that can
+  -- opt out of it.  A filter over the picture, the way a coloured lens is.
   --
-  -- This is that rectangle in a colour, held instead of pulsed.  It goes on
-  -- the end of the overworld's own draw, which means it lands over the map and
-  -- UNDER everything drawn after it -- text boxes, the START menu, every
-  -- full-screen menu -- because those are later states in the stack.  That is
-  -- why the menu keeps its own colour without a single check for one.
-  --
-  -- Multiply, not alpha.  An alpha wash lays a flat colour over the picture
-  -- and drags everything toward it; multiplying by a colour lerped from white
-  -- toward the tint scales each pixel instead, so bright grass stays bright,
-  -- dark tiles stay dark, and the hue shifts across all of it.  A tint of 0
-  -- multiplies by white, which is the untouched frame.
+  -- It covers the playfield only, never the margins or the on-screen pad,
+  -- because the viewport says where the game actually is.
 
-  local WORLD_W, WORLD_H = 160, 144
-
-  -- Injectable so the drawing can be asserted headlessly; the game passes
-  -- nothing and gets love.graphics.
-  local function graphics()
-    return mod.__graphics or (love and love.graphics)
-  end
-
-  -- Alpha, not multiply, and that is not a style choice.
-  --
-  -- The thing being replaced is a rectangle over the world in the DEFAULT
-  -- blend mode -- `setColor(0, 0, 0, 0.45)` then `rectangle("fill", ...)` --
-  -- and that is the one blend proven to land where this paints.  A multiply
-  -- pass at the same spot showed nothing at all: the overworld draws into a
-  -- canvas of its own, and multiplying against it does not survive the
-  -- composite the way a straight alpha blend does.  It looked right on an
-  -- opaque menu and did nothing on the map, which is exactly what was
-  -- reported.
-  --
-  -- So this is the engine's own rectangle in a colour, held instead of pulsed.
-  -- The alpha is scaled off the tint depth and tops out near the 0.45 the
-  -- vanilla flash uses, so the strongest this ever gets is about as strong as
-  -- the thing it took away -- in colour, and never a blackout.
-  local function paint(g, key, amount, x, y, w, h)
+  local function paint(g, key, amount, view)
     local entry = Colours.entry(key)
     if not entry then return end
     local r, gr, b
     if entry.desaturate then
-      r, gr, b = 0.35, 0.35, 0.38
+      r, gr, b = 0.32, 0.32, 0.36
     else
       local t = entry.tint
       r, gr, b = t[1] / 255, t[2] / 255, t[3] / 255
     end
+    local x = (view and view.gameX) or 0
+    local y = (view and view.gameY) or 0
+    local w = (view and view.gameWidth) or 160
+    local h = (view and view.gameHeight) or 144
     g.push("all")
-    -- Named rather than assumed: push("all") saves whatever was set, and the
-    -- engine may have left something else bound.
+    -- Named rather than assumed: push("all") saves whatever was bound, and the
+    -- pipeline may have left a shader or a different blend behind.
+    if g.setShader then g.setShader() end
     if g.setBlendMode then g.setBlendMode("alpha", "alphamultiply") end
+    -- The alpha tops out near the 0.45 the vanilla poison flash uses, so the
+    -- strongest this gets is about as strong as the thing it took away -- in
+    -- colour, and never a blackout.
     g.setColor(r, gr, b, amount * 0.6)
-    g.rectangle("fill", x or 0, y or 0, w or WORLD_W, h or WORLD_H)
+    g.rectangle("fill", x, y, w, h)
     g.pop()
   end
 
-  -- Wrapped on the instance rather than the class: the overworld is rebuilt on
-  -- a new game and on some warps, and a fresh instance would otherwise arrive
-  -- unwrapped.  The original is parked on the instance so a second pass is a
-  -- no-op instead of two rectangles.
-  local WRAPPED = "__statusColoursDraw"
-
-  local function wrapDraw(world)
-    if type(world) ~= "table" then return end
-    if rawget(world, WRAPPED) then return end
-    local original = world.draw
-    if type(original) ~= "function" then return end
-    rawset(world, WRAPPED, original)
-    world.draw = function(selfWorld, ...)
-      local result = original(selfWorld, ...)
-      local want = pendingFor(selfWorld)
-      local g = graphics()
-      if want and g then
-        local drew = pcall(paint, g, want.key, want.amount)
-        if not drew then
-          mod.log:warn("STATUS COLOURS could not draw the tint; standing down")
-          world.draw = original
-          rawset(world, WRAPPED, nil)
-        end
-      end
-      return result
-    end
+  local function graphics()
+    return mod.__graphics or (love and love.graphics)
   end
 
-  -- Worked out on the overworld's own draw rather than cached from a hook, so
-  -- the answer is never a frame stale and there is nothing to keep in sync.
-  function pendingFor(world)
-    if not on("enabled") or not on("world") then return nil end
-    local game = world and world.game or currentGame
+  mod.hooks:wrap("render.hud", function(next, game, view)
+    local result = next(game, view)
+    if not on("enabled") or not on("world") then return result end
+    -- The engine's own test for "the map is what is on screen": false in a
+    -- battle, where the status is already on the HUD, and false under a
+    -- full-screen menu, which is opaque and becomes the visible base itself.
+    if not overworldIsBase(game) then return result end
+
     local party = partyOf(game)
-    if not party then return nil end
+    if not party then return result end
     local key = Colours.worstIn(party, on("lowhp") and LOW_HP_FRACTION or nil,
       worldAllowed())
-    if not key then return nil end
-    local pulse = takeFlash(game)
-    return { key = key,
-             amount = Colours.amountFor(opt("depth"), pulse, flashPeak) }
-  end
+    -- Only swallow the flash when a colour is going to replace it.  With
+    -- POISON switched off the player has said they do not want the tint, and
+    -- letting the engine's flash fire is the honest reading of that.
+    local pulse = key and takeFlash(game) or 0
+    if not key then return result end
 
-  -- The overworld does not carry a back-reference to the game on every build,
-  -- so the last one seen through the hook stands in.  render.zones is used for
-  -- nothing else here: its list is handed straight back.
-  mod.hooks:wrap("render.zones", function(next, game, zones)
-    local out = next(game, zones)
-    currentGame = game
-    if on("enabled") and on("world") and overworldIsBase(game) then
-      wrapDraw(game and game.overworld)
+    local g = graphics()
+    if not g then return result end
+    local amount = Colours.amountFor(opt("depth"), pulse, flashPeak)
+    if not pcall(paint, g, key, amount, view) then
+      mod.log:warn("STATUS COLOURS could not draw the filter; standing down")
     end
-    return out
+    return result
   end)
 
   -- What the world is wearing, for anything that wants to agree with it.
