@@ -136,6 +136,10 @@ return function(mod)
   -- agree rather than each having an opinion.
   local LOW_HP_FRACTION = 0.2
 
+  -- forward-declared: pendingFor is defined with the drawing, and the last
+  -- game seen is what the overworld's draw reads the party from.
+  local pendingFor, currentGame
+
   -- What OverworldState:applyFieldPoison sets the counter to.  Only the floor
   -- for the very first frame: the live counter is watched instead, so a mod
   -- that lengthens the flash gets a longer deepening rather than a clipped one.
@@ -213,93 +217,117 @@ return function(mod)
     return pulse
   end
 
-  -- ------- the zones
+  -- ------- how the colour reaches the screen
   --
-  -- There are two zone lists and they are not interchangeable.
+  -- Not through palettes.  That was the first attempt and it cannot work for
+  -- everyone: `render.zones` and `sgbWorldZones` are the SGB shade-remap path,
+  -- and a map drawn from a full-colour GBC atlas has no four-colour palette to
+  -- move -- `OverworldState:sgbWorldZones` returns an empty list outright when
+  -- `PaletteFX.usesGbcPack()` and the map has a `gbcAtlas`.  Under RED++ the
+  -- tint simply had nothing to bite on, and the screen stayed exactly as it
+  -- was.
   --
-  -- `render.zones` hands a mod the **UI pass** list -- 160x144 space, the
-  -- menus and text boxes (src/core/Game.lua:684).  The **world pass** takes a
-  -- different list entirely, in world-canvas pixels, which the engine asks the
-  -- overworld for a few lines later:
+  -- So it is drawn, which is what the thing it replaces does.  The engine's
+  -- own poison flash is a rectangle over the world:
   --
-  --     if worldDrawn and self.overworld.sgbWorldZones then
-  --       worldZones = self.overworld:sgbWorldZones()
-  --     end
+  --     love.graphics.setColor(0, 0, 0, 0.45)
+  --     love.graphics.rectangle("fill", 0, 0, 160, 144)
   --
-  -- Tinting the hook's list therefore colours the START menu and leaves the
-  -- map alone, which is the exact opposite of the point.  The map is
-  -- `sgbWorldZones`, so that is what this wraps -- the hook is kept only
-  -- because it runs once a frame with the game in hand, immediately before
-  -- that call, which makes it the place to work out what colour the frame
-  -- wants and to swallow the tick.
+  -- This is that rectangle in a colour, held instead of pulsed.  It goes on
+  -- the end of the overworld's own draw, which means it lands over the map and
+  -- UNDER everything drawn after it -- text boxes, the START menu, every
+  -- full-screen menu -- because those are later states in the stack.  That is
+  -- why the menu keeps its own colour without a single check for one.
   --
-  -- The UI list is handed back untouched.  A tinted menu is not a subtler
-  -- flash, it is a menu that has gone the wrong colour.
+  -- Multiply, not alpha.  An alpha wash lays a flat colour over the picture
+  -- and drags everything toward it; multiplying by a colour lerped from white
+  -- toward the tint scales each pixel instead, so bright grass stays bright,
+  -- dark tiles stay dark, and the hue shifts across all of it.  A tint of 0
+  -- multiplies by white, which is the untouched frame.
 
-  local pending = nil        -- { key, amount }, set each frame by the hook
+  local WORLD_W, WORLD_H = 160, 144
 
-  local function tintZones(zones, key, amount)
-    local out = {}
-    for i = 1, #zones do
-      local zone = zones[i]
-      if type(zone) ~= "table" or zone.colors == nil or zone.colors == false then
-        -- colors == false is the trueColor opt-out: a rect that blits with no
-        -- shader so full-colour art survives the pass.  Tinting it is not
-        -- possible, and pretending otherwise would drop the opt-out.
-        out[i] = zone
-      else
-        local tinted = {}
-        for k, v in pairs(zone) do tinted[k] = v end
-        tinted.colors = Colours.apply(zone.colors, key, amount)
-        out[i] = tinted
-      end
+  -- Injectable so the drawing can be asserted headlessly; the game passes
+  -- nothing and gets love.graphics.
+  local function graphics()
+    return mod.__graphics or (love and love.graphics)
+  end
+
+  local function paint(g, key, amount)
+    local entry = Colours.entry(key)
+    if not entry then return end
+    -- White is "no change" under multiply.  A tint pulls the three channels
+    -- apart from it; a drain pulls them together toward this shade's own luma,
+    -- which is what greys a fainted party's world if that is ever switched on
+    -- for the overworld.
+    local c
+    if entry.desaturate then
+      c = { 1 - amount * 0.35, 1 - amount * 0.35, 1 - amount * 0.35 }
+    else
+      local t = entry.tint
+      c = { 1 - amount * (1 - t[1] / 255),
+            1 - amount * (1 - t[2] / 255),
+            1 - amount * (1 - t[3] / 255) }
     end
-    return out
+    g.push("all")
+    g.setBlendMode("multiply", "premultiplied")
+    g.setColor(c[1], c[2], c[3], 1)
+    g.rectangle("fill", 0, 0, WORLD_W, WORLD_H)
+    g.pop()
   end
 
   -- Wrapped on the instance rather than the class: the overworld is rebuilt on
   -- a new game and on some warps, and a fresh instance would otherwise arrive
   -- unwrapped.  The original is parked on the instance so a second pass is a
-  -- no-op instead of a tint applied twice.
-  local WRAPPED = "__statusColoursWorldZones"
+  -- no-op instead of two rectangles.
+  local WRAPPED = "__statusColoursDraw"
 
-  local function wrapWorldZones(world)
+  local function wrapDraw(world)
     if type(world) ~= "table" then return end
     if rawget(world, WRAPPED) then return end
-    local original = world.sgbWorldZones
+    local original = world.draw
     if type(original) ~= "function" then return end
     rawset(world, WRAPPED, original)
-    world.sgbWorldZones = function(selfWorld, ...)
-      local zones = original(selfWorld, ...)
-      local want = pending
-      if not want or type(zones) ~= "table" or not zones[1] then return zones end
-      return tintZones(zones, want.key, want.amount)
+    world.draw = function(selfWorld, ...)
+      local result = original(selfWorld, ...)
+      local want = pendingFor(selfWorld)
+      local g = graphics()
+      if want and g then
+        local drew = pcall(paint, g, want.key, want.amount)
+        if not drew then
+          mod.log:warn("STATUS COLOURS could not draw the tint; standing down")
+          world.draw = original
+          rawset(world, WRAPPED, nil)
+        end
+      end
+      return result
     end
   end
 
-  mod.hooks:wrap("render.zones", function(next, game, zones)
-    local out = next(game, zones)
-    pending = nil
-    if not on("enabled") or not on("world") then return out end
-    if not overworldIsBase(game) then return out end
-
-    wrapWorldZones(game and game.overworld)
-
+  -- Worked out on the overworld's own draw rather than cached from a hook, so
+  -- the answer is never a frame stale and there is nothing to keep in sync.
+  function pendingFor(world)
+    if not on("enabled") or not on("world") then return nil end
+    local game = world and world.game or currentGame
     local party = partyOf(game)
-    if not party then return out end
-
+    if not party then return nil end
     local key = Colours.worstIn(party, on("lowhp") and LOW_HP_FRACTION or nil,
       worldAllowed())
-    -- Only swallow the flash when a colour is going to replace it.  With
-    -- POISON switched off the player has said they do not want the tint, and
-    -- letting the engine's flash fire is the honest reading of that.
-    local pulse = key and takeFlash(game) or 0
-    if not key then return out end
+    if not key then return nil end
+    local pulse = takeFlash(game)
+    return { key = key,
+             amount = Colours.amountFor(opt("depth"), pulse, flashPeak) }
+  end
 
-    pending = { key = key,
-                amount = Colours.amountFor(opt("depth"), pulse, flashPeak) }
-    -- The UI pass, unchanged.  What the map wears is decided in the wrapper
-    -- above, on the list the map is actually drawn through.
+  -- The overworld does not carry a back-reference to the game on every build,
+  -- so the last one seen through the hook stands in.  render.zones is used for
+  -- nothing else here: its list is handed straight back.
+  mod.hooks:wrap("render.zones", function(next, game, zones)
+    local out = next(game, zones)
+    currentGame = game
+    if on("enabled") and on("world") and overworldIsBase(game) then
+      wrapDraw(game and game.overworld)
+    end
     return out
   end)
 

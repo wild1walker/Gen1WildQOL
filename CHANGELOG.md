@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.7.2
+
+**The world tint now works in every colour mode.** 1.7.0 and 1.7.1 both built it
+on SGB palette zones, and that could never work for anyone running full-colour
+art: `OverworldState:sgbWorldZones` returns an **empty list** outright when
+`PaletteFX.usesGbcPack()` and the map has a `gbcAtlas`, so under RED++ there was
+no four-colour palette to shift and the tint had nothing to bite on. The screen
+stayed exactly as it was.
+
+The thing being replaced was never a palette change either. The engine's own
+poison flash is a rectangle drawn over the world:
+
+```lua
+love.graphics.setColor(0, 0, 0, 0.45)
+love.graphics.rectangle("fill", 0, 0, 160, 144)
+```
+
+So this is that rectangle in a colour, held instead of pulsed. It is painted on
+the end of the overworld's own draw, which puts it over the map and **under**
+everything drawn after it -- text boxes, the START menu, every full-screen menu
+-- because those are later states in the stack. That is why the menu keeps its
+own colour without a single check for one.
+
+It multiplies rather than washing: the rectangle's colour is lerped from white
+toward the tint, so bright grass stays bright, dark tiles stay dark, and the
+hue shifts across all of it. A tint of zero multiplies by white, which is the
+untouched frame.
+
+### Why it shipped twice
+
+Every test drove the feature file directly, so a feature that installs
+correctly and reaches the player doing nothing looked green. There is now a
+test that starts where the game does -- the real `features.lua`, the real
+`runtime/bundle.lua` -- and asserts a poisoned party ends with a rectangle
+painted over the world. Both of the previous mechanisms fail it.
+
+### Still palette-based, and worth knowing
+
+The tint on a POKéMON's own picture -- party list, box, stats page -- still
+rides the per-POKéMON palette zone those screens build. A **full-colour icon or
+sprite pack sits that pass out by design**, so if your art is full-colour those
+will not tint either. Same root cause, same fix available; say the word.
+
 ## 1.7.1
 
 **The tint was on the wrong surface.** 1.7.0 turned the START menu purple and
