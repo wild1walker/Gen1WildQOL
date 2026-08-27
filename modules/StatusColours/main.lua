@@ -57,14 +57,28 @@ return function(mod)
     { key = "world", type = "toggle", label = "TINT THE WORLD",
       default = true, visible_if = { key = "enabled", equals = true } },
 
-    -- Which conditions the world reacts to at all.  POISON is the default and
-    -- not a timid one: poison is the condition doing something to you while
-    -- you walk, which is why it is the one the game already interrupts for.
-    -- PARALYSIS lasts until a town and would paint the world yellow for an
-    -- hour to say something no step changes.
+    -- Which conditions the world reacts to at all.
+    --
+    -- DAMAGING is the default: the statuses that take HP.  In Gen 1 that is
+    -- poison, bad poison and burn -- HandlePoisonBurnLeechSeed is one routine
+    -- over the three of them (src/battle/BattleState.lua:2778) -- and it is
+    -- the honest line to draw, because a colour that means "this is costing
+    -- you HP" is worth wearing and a colour that means "this will be awkward
+    -- in your next battle" is not.
+    --
+    -- Only poison ticks in the field, so only poison ever deepens; burn shows
+    -- its colour while you walk and does its damage in battle.  That is the
+    -- point rather than an inconsistency: the world says what the party is
+    -- carrying, and it is carrying a burn.
+    --
+    -- POISON narrows it to the one the game itself interrupts for.  ANY STATUS
+    -- opens it to the rest -- worth knowing that paralysis lasts until a town,
+    -- so it will paint the world yellow for an hour to say something no step
+    -- changes.
     { key = "world_scope", type = "choice", label = "WORLD REACTS TO",
-      default = "poison",
-      choices = { { "poison", "POISON" }, { "any", "ANY STATUS" } },
+      default = "damaging",
+      choices = { { "damaging", "DAMAGING" }, { "poison", "POISON" },
+                  { "any", "ANY STATUS" } },
       visible_if = { key = "world", equals = true } },
 
     { key = "depth", type = "choice", label = "DEPTH", default = "normal",
@@ -137,14 +151,23 @@ return function(mod)
     return allowed
   end
 
+  -- Fainted is in none of the narrowed sets, deliberately.  A fainted mon is
+  -- not doing anything to you as you walk, and a world greyed out for the rest
+  -- of the route is a punishment the game never asked for.  Its colour is for
+  -- the party and box lists, where it answers "which of these can still
+  -- fight", and FAINTED GREY still governs it there.
+  local SCOPES = {
+    poison   = { psn = true, tox = true },
+    damaging = { psn = true, tox = true, brn = true },
+  }
+
   local function worldAllowed()
     local allowed = allowedSet()
-    if opt("world_scope") == "any" then return allowed end
-    -- POISON means the two poisons and nothing else.  Fainted is deliberately
-    -- not in here: a fainted mon is not doing anything to you as you walk, and
-    -- a world greyed out for the rest of the route is a punishment the game
-    -- never asked for.
-    return { psn = allowed.psn, tox = allowed.tox }
+    local scope = SCOPES[opt("world_scope")]
+    if not scope then return allowed end   -- ANY STATUS, or an unknown value
+    local out = {}
+    for key in pairs(scope) do out[key] = allowed[key] end
+    return out
   end
 
   local function partyOf(game)
@@ -247,10 +270,14 @@ return function(mod)
     return tintZones(base, key, amount)
   end)
 
-  -- What the world is wearing, for anything that wants to agree with it: the
-  -- menu tinting that follows this, and any mod that would rather read the
-  -- answer than work it out again.
-  mod.exports.statusColours = {
+  -- What the world is wearing, for anything that wants to agree with it.
+  --
+  -- Gen1Dex, Gen1Party and Gen1BillsBox each already build a per-POKéMON SGB
+  -- zone out of PaletteFX.monPal, so tinting a POKéMON's own picture is a
+  -- question of running those four colours through this before the zone is
+  -- made.  Three screens, one table: the alternative was three copies of the
+  -- colours drifting apart the first time one was edited.
+  local api = {
     keyFor = function(monster)
       return Colours.keyFor(monster, on("lowhp") and LOW_HP_FRACTION or nil)
     end,
@@ -264,7 +291,87 @@ return function(mod)
       return Colours.apply(colors, key, amount or Colours.amountFor(opt("depth")))
     end,
     depth = function() return Colours.amountFor(opt("depth")) end,
+    -- Whether the feature is doing anything at all, so a caller can skip the
+    -- work rather than apply a tint of zero.
+    active = function() return on("enabled") end,
   }
+
+  -- Siblings inside this bundle reach it by name through the registry; the
+  -- screens that need it are outside, in the other half, so it also goes on
+  -- the bundle's own exports where the engine's mod.find already looks.
+  mod.exports.statusColours = api
+  if type(mod.publish) == "function" then mod.publish("statusColours", api) end
+
+  -- ------- the stats page
+  --
+  -- Gen1Party and Gen1BillsBox colour their own lists by asking the table
+  -- above.  The stats page is the engine's own screen (src/ui/SummaryMenu.lua)
+  -- and no mod here owns it, so this one decorates it: it is the one place a
+  -- POKeMON's full picture is shown with its status printed beside it, and a
+  -- purple picture next to the word POISONED is the whole idea of the feature
+  -- in a single screen.
+  --
+  -- The Pokedex is deliberately not in this list.  A dex entry is a page about
+  -- a SPECIES -- Gen1Dex never touches a mon instance and never reads the
+  -- party -- so there is no status there to show.  RATTATA is not poisoned;
+  -- your RATTATA is.
+  --
+  -- Only the screen's palette method is replaced, and only the zones that are
+  -- not the whole screen: SummaryMenu answers with a full-screen HP-bar
+  -- palette plus one zone over the picture, and the picture is the half that
+  -- should wear the condition.  Everything else about the screen is the
+  -- engine's, untouched.
+  local function tintSummary()
+    if not (mod.content and mod.content.screens) then return end
+    local ok, err = pcall(function()
+      mod.content.screens:register("SummaryMenu", {
+        new = function(game, ...)
+          local got, Builtin = pcall(require, "src.ui.SummaryMenu")
+          if not got or type(Builtin) ~= "table"
+              or type(Builtin.new) ~= "function" then
+            error("statuscolours: no builtin summary screen to decorate", 0)
+          end
+          local state = Builtin.new(game, ...)
+          local inherited = state.sgbPalettes
+              or (Builtin.sgbPalettes and function(self, g)
+                    return Builtin.sgbPalettes(self, g)
+                  end)
+          if type(inherited) ~= "function" then return state end
+          state.sgbPalettes = function(self, g)
+            local zones = inherited(self, g)
+            if not on("enabled") or type(zones) ~= "table" then return zones end
+            local monster = self.mon
+            local key = monster and Colours.keyFor(monster,
+              on("lowhp") and LOW_HP_FRACTION or nil)
+            if not key or not on(key) then return zones end
+            local amount = Colours.amountFor(opt("depth"))
+            local out = {}
+            for i = 1, #zones do
+              local zone = zones[i]
+              local whole = type(zone) == "table"
+                and (zone.w or 0) >= 160 and (zone.h or 0) >= 144
+              if type(zone) ~= "table" or zone.colors == nil
+                  or zone.colors == false or whole then
+                out[i] = zone
+              else
+                local tinted = {}
+                for k, v in pairs(zone) do tinted[k] = v end
+                tinted.colors = Colours.apply(zone.colors, key, amount)
+                out[i] = tinted
+              end
+            end
+            return out
+          end
+          return state
+        end,
+      })
+    end)
+    if not ok then
+      mod.log:warn("STATUS COLOURS is not colouring the stats page (%s) -- "
+        .. "the engine's own screen stands", tostring(err))
+    end
+  end
+  tintSummary()
 
   mod.log:info("STATUS COLOURS installed: the world wears what the party is "
     .. "carrying, and the poison tick deepens it instead of blacking out")

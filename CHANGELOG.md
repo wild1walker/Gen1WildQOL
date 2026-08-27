@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.7.0
+
+STATUS COLOURS reaches the POKéMON themselves, and the world now reacts to
+everything that takes HP rather than to poison alone.
+
+- **`WORLD REACTS TO` defaults to `DAMAGING`** -- poison, bad poison and burn.
+  Gen 1 runs the three of them through one routine,
+  `HandlePoisonBurnLeechSeed`, and taking HP is the honest line to draw: a
+  colour that means "this is costing you" is worth wearing, and one that means
+  "this will be awkward in your next battle" is not. Only poison ticks in the
+  field, so only poison deepens; a burn shows its colour while you walk and
+  does its damage in battle. `POISON` narrows it back to the old default and
+  `ANY STATUS` opens it to all five.
+- **A POKéMON's own picture wears its condition** on the stats page -- the one
+  screen that shows the full picture with the status printed beside it. Only
+  the picture is tinted, not the page: the screen's full-screen HP-bar palette
+  is left alone, or the bar would stop meaning what it means.
+- **The party list and the box** tint too, through
+  [Gen1Party](https://github.com/wild1walker/Gen1Party) 1.5.0 and
+  [Gen1BillsBox](https://github.com/wild1walker/Gen1BillsBox) 1.3.0, which ask
+  this mod rather than carrying their own copy of the colours. The tint rides
+  the per-POKéMON zone each already builds, over the species colours, so a
+  poisoned CHARMANDER still reads as a CHARMANDER.
+
+### The Pokédex is not in that list, on purpose
+
+A dex entry is a page about a *species*. Gen1Dex never touches a POKéMON
+instance and never reads the party, so there is no condition there to show:
+RATTATA is not poisoned, your RATTATA is. Tinting it would have meant inventing
+a status for a catalogue.
+
+### Fixed
+
+- **`LOW HP` could never have fired in a real game.** It read `mon.maxHP`;
+  this engine keeps maximum HP in `mon.stats.hp` (`src/pokemon/Pokemon.lua`).
+  The stub POKéMON in 1.6.0's tests carried the field the code was looking for,
+  so the tests agreed with the bug. They now use the real shape, and the other
+  two spellings are still accepted for a battler or a serialized POKéMON.
+
+### For mod authors
+
+A bundled feature can now publish an API on the bundle's own exports with
+`mod.publish(name, value)`, which is how the party and the box reach this one:
+
+```lua
+local qol = mod.find("gen1_wild_qol")
+local api = qol and qol.exports and qol.exports.statusColours
+```
+
+Two features cannot publish the same name -- the second is refused rather than
+silently winning, which would make the answer depend on feature order.
+
 ## 1.6.0
 
 New feature: **STATUS COLOURS**, on by default.

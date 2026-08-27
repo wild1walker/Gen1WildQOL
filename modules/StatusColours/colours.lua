@@ -77,7 +77,12 @@ function Colours.keyFor(mon, lowFraction)
   end
   local mapped = type(status) == "string" and Colours.FROM_STATUS[status] or nil
   if mapped then return mapped end
-  local maxHP = tonumber(mon.maxHP or mon.maxHp)
+  -- Max HP is `mon.stats.hp` in this engine (src/pokemon/Pokemon.lua: `hp =
+  -- stats.hp` at creation, and Pokemon.heal reads `mon.stats.hp` back).  The
+  -- other two spellings are what a battler or a serialized mon may carry, and
+  -- are here so this answers for those too rather than silently declining to.
+  local stats = type(mon.stats) == "table" and mon.stats or nil
+  local maxHP = tonumber((stats and stats.hp) or mon.maxHP or mon.maxHp)
   if hp and maxHP and maxHP > 0 and lowFraction and lowFraction > 0
       and hp <= maxHP * lowFraction then
     return "lowhp"

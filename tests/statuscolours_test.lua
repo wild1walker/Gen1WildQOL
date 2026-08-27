@@ -51,12 +51,16 @@ eq(C.keyFor({ hp = 20, maxHP = 40, status = "PSN", toxicCounter = 3 }), "tox",
   "the Toxic counter makes PSN bad poison")
 eq(C.keyFor({ hp = 20, maxHP = 40, status = "PSN", toxicCounter = 0 }), "psn",
   "a zero counter does not")
-eq(C.keyFor({ hp = 5, maxHP = 40 }, 0.2), "lowhp",
-  "an unstatused mon at a fifth of its HP is low")
-eq(C.keyFor({ hp = 5, maxHP = 40 }, nil), nil,
+eq(C.keyFor({ hp = 5, stats = { hp = 40 } }, 0.2), "lowhp",
+  "an unstatused mon at a fifth of its HP is low -- stats.hp, the real field")
+eq(C.keyFor({ hp = 5, stats = { hp = 40 } }, nil), nil,
   "and is not, when the caller passes no threshold")
-eq(C.keyFor({ hp = 5, maxHP = 40, status = "PAR" }, 0.2), "par",
+eq(C.keyFor({ hp = 5, stats = { hp = 40 }, status = "PAR" }, 0.2), "par",
   "a status outranks low HP on the same mon")
+eq(C.keyFor({ hp = 5, maxHP = 40 }, 0.2), "lowhp",
+  "maxHP still answers, for a battler or a serialized mon that carries it")
+eq(C.keyFor({ hp = 5 }, 0.2), nil,
+  "and a mon with no max at all is not guessed at")
 eq(C.keyFor(nil), nil, "an empty slot carries nothing")
 eq(C.keyFor({ hp = 20, status = "WAT" }), nil, "an unknown status is ignored")
 
@@ -198,6 +202,8 @@ ok(#m.defined == 13, "with a row for every switch (" .. tostring(#m.defined) .. 
 eq(m.defined[1].key, "enabled", "and the master first, which features.lua donates")
 ok(m.wrapped["render.zones"] ~= nil, "it wraps render.zones")
 ok(type(m.exports.statusColours) == "table", "and publishes what it is wearing")
+eq(m.defined[3].default, "damaging",
+  "WORLD REACTS TO defaults to the statuses that take HP")
 
 io.write("a poisoned party tints the world\n")
 local zones = m.wrapped["render.zones"](same,
@@ -248,10 +254,22 @@ eq(offGame.overworld.poisonFlash, 12,
   "with the vanilla flash left alone, since nothing is replacing it")
 m.stored.psn = nil
 
+io.write("the world reacts to what takes HP\n")
+eq(m.wrapped["render.zones"](same,
+  stubGame({ { hp = 20, maxHP = 40, status = "BRN" } }), ZONES) ~= ZONES, true,
+  "burn tints by default: it is one of the three HandlePoisonBurnLeechSeed takes HP for")
 io.write("paralysis does not paint the world by default\n")
 eq(m.wrapped["render.zones"](same,
   stubGame({ { hp = 20, maxHP = 40, status = "PAR" } }), ZONES), ZONES,
-  "WORLD REACTS TO is POISON, and paralysis lasts until a town")
+  "paralysis takes no HP, so DAMAGING leaves it out")
+eq(m.wrapped["render.zones"](same,
+  stubGame({ { hp = 20, maxHP = 40, status = "SLP" } }), ZONES), ZONES,
+  "and so does sleep")
+m.stored.world_scope = "poison"
+eq(m.wrapped["render.zones"](same,
+  stubGame({ { hp = 20, maxHP = 40, status = "BRN" } }), ZONES), ZONES,
+  "POISON narrows it back to the two poisons")
+m.stored.world_scope = nil
 m.stored.world_scope = "any"
 ok(m.wrapped["render.zones"](same,
   stubGame({ { hp = 20, maxHP = 40, status = "PAR" } }), ZONES) ~= ZONES,
@@ -271,6 +289,63 @@ local out = m.wrapped["render.zones"](same,
   stubGame({ { hp = 20, maxHP = 40, status = "PSN" } }), mixed)
 eq(out[1].colors, false, "the opt-out survives the pass")
 ok(out[2].colors[2][1] > out[2].colors[2][2], "while the zone beside it tints")
+
+-- ------- the stats page
+--
+-- The one screen where a POKeMON's full picture is shown with its status
+-- printed beside it.  SummaryMenu answers with a full-screen HP-bar palette
+-- plus one zone over the picture; only the picture should wear the condition,
+-- or the whole page turns purple and the bar stops meaning what it means.
+
+io.write("the stats page tints the picture and not the page\n")
+local registered
+local function stubModWithScreens()
+  local m = stubMod()
+  m.content = { screens = { register = function(_, id, record)
+    registered = { id = id, record = record }
+  end } }
+  return m
+end
+do
+  local chunk = assert(loadfile("modules/StatusColours/main.lua"))
+  local m2 = stubModWithScreens()
+  chunk()(m2)
+  ok(registered ~= nil, "a screen is registered")
+  eq(registered and registered.id, "SummaryMenu", "under the engine's own id")
+
+  local WHOLE = { x = 0, y = 0, w = 160, h = 144,
+                  colors = { { 255, 255, 255 }, { 170, 170, 170 },
+                             { 85, 85, 85 }, { 0, 0, 0 } } }
+  local PIC = { x = 8, y = 0, w = 56, h = 56,
+                colors = { { 255, 255, 255 }, { 170, 170, 170 },
+                           { 85, 85, 85 }, { 0, 0, 0 } } }
+  local Builtin = {}
+  Builtin.__index = Builtin
+  function Builtin.new(_, mon)
+    local self = setmetatable({ mon = mon }, Builtin)
+    self.sgbPalettes = function() return { WHOLE, PIC } end
+    return self
+  end
+
+  local saved = package.loaded["src.ui.SummaryMenu"]
+  package.loaded["src.ui.SummaryMenu"] = Builtin
+  local poisoned = registered.record.new({},
+    { hp = 20, stats = { hp = 40 }, status = "PSN" })
+  local zones = poisoned:sgbPalettes({})
+  package.loaded["src.ui.SummaryMenu"] = saved
+
+  eq(zones[1].colors, WHOLE.colors, "the full-screen bar palette is left alone")
+  ok(zones[2].colors ~= PIC.colors, "the picture's zone is replaced")
+  ok(zones[2].colors[2][1] > zones[2].colors[2][2], "and wears the purple")
+  eq(zones[2].x, PIC.x, "the rect is untouched")
+  eq(PIC.colors[2][1], 170, "and the engine's table was not written through")
+
+  package.loaded["src.ui.SummaryMenu"] = Builtin
+  local healthy = registered.record.new({}, { hp = 40, stats = { hp = 40 } })
+  local plain = healthy:sgbPalettes({})
+  package.loaded["src.ui.SummaryMenu"] = saved
+  eq(plain[2].colors, PIC.colors, "a healthy POKeMON's picture is untinted")
+end
 
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 os.exit(failed == 0 and 0 or 1)
