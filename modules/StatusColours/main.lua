@@ -253,25 +253,36 @@ return function(mod)
     return mod.__graphics or (love and love.graphics)
   end
 
+  -- Alpha, not multiply, and that is not a style choice.
+  --
+  -- The thing being replaced is a rectangle over the world in the DEFAULT
+  -- blend mode -- `setColor(0, 0, 0, 0.45)` then `rectangle("fill", ...)` --
+  -- and that is the one blend proven to land where this paints.  A multiply
+  -- pass at the same spot showed nothing at all: the overworld draws into a
+  -- canvas of its own, and multiplying against it does not survive the
+  -- composite the way a straight alpha blend does.  It looked right on an
+  -- opaque menu and did nothing on the map, which is exactly what was
+  -- reported.
+  --
+  -- So this is the engine's own rectangle in a colour, held instead of pulsed.
+  -- The alpha is scaled off the tint depth and tops out near the 0.45 the
+  -- vanilla flash uses, so the strongest this ever gets is about as strong as
+  -- the thing it took away -- in colour, and never a blackout.
   local function paint(g, key, amount, x, y, w, h)
     local entry = Colours.entry(key)
     if not entry then return end
-    -- White is "no change" under multiply.  A tint pulls the three channels
-    -- apart from it; a drain pulls them together toward this shade's own luma,
-    -- which is what greys a fainted party's world if that is ever switched on
-    -- for the overworld.
-    local c
+    local r, gr, b
     if entry.desaturate then
-      c = { 1 - amount * 0.35, 1 - amount * 0.35, 1 - amount * 0.35 }
+      r, gr, b = 0.35, 0.35, 0.38
     else
       local t = entry.tint
-      c = { 1 - amount * (1 - t[1] / 255),
-            1 - amount * (1 - t[2] / 255),
-            1 - amount * (1 - t[3] / 255) }
+      r, gr, b = t[1] / 255, t[2] / 255, t[3] / 255
     end
     g.push("all")
-    g.setBlendMode("multiply", "premultiplied")
-    g.setColor(c[1], c[2], c[3], 1)
+    -- Named rather than assumed: push("all") saves whatever was set, and the
+    -- engine may have left something else bound.
+    if g.setBlendMode then g.setBlendMode("alpha", "alphamultiply") end
+    g.setColor(r, gr, b, amount * 0.6)
     g.rectangle("fill", x or 0, y or 0, w or WORLD_W, h or WORLD_H)
     g.pop()
   end
@@ -406,16 +417,23 @@ return function(mod)
   -- party -- so there is no status there to show.  RATTATA is not poisoned;
   -- your RATTATA is.
   --
-  -- Painted, not palette-shifted, for the reason the world tint is: a picture
-  -- drawn from full-colour art sits the shade-remap pass out by design, so a
-  -- palette zone colours nothing for anyone running such a pack.
+  -- Through the picture's PALETTE, not by painting over it, and the difference
+  -- is the whole white box behind the POKeMON.  Painting the rect was tried
+  -- and it is wrong: the zone covers the picture WELL, background included, so
+  -- a rectangle over it turns that white square the colour of the tint and the
+  -- screen grows a lavender block.  A palette shift moves the four colours the
+  -- picture is drawn through, and the well's background is colour 0 of the
+  -- species palette -- an off-white -- so it stays an off-white.
   --
-  -- The rect is not hard-coded.  The screen already answers sgbPalettes with
-  -- an HP-bar palette over the whole screen plus one zone over the picture --
-  -- so the picture's rect is the one zone that is not the whole screen, and
-  -- reading it back means the engine can move the picture without this having
-  -- an opinion about where it went.  It is also why the HP bar is untouched:
-  -- that is the whole-screen entry, and it is skipped.
+  -- The cost is honest: a picture drawn from full-colour art sits the
+  -- shade-remap pass out by design, so this tints nothing for such a pack.
+  -- The alternative was a lavender box for everyone, which is worse than no
+  -- tint for some.  Tinting the sprite and not its background needs the seam
+  -- to set a colour around the sprite's own draw, and the engine does not
+  -- offer one here.
+  --
+  -- The whole-screen entry is the HP-bar palette and is skipped, or the bar
+  -- would stop meaning what it means.
   local function tintSummary()
     if not (mod.content and mod.content.screens) then return end
     local ok, err = pcall(function()
@@ -427,32 +445,32 @@ return function(mod)
             error("statuscolours: no builtin summary screen to decorate", 0)
           end
           local state = Builtin.new(game, ...)
-          local palettes = state.sgbPalettes or Builtin.sgbPalettes
-          local drawn = state.draw or Builtin.draw
-          if type(palettes) ~= "function" or type(drawn) ~= "function" then
-            return state
-          end
-          state.draw = function(self, ...)
-            local result = drawn(self, ...)
-            if not on("enabled") then return result end
+          local inherited = state.sgbPalettes or Builtin.sgbPalettes
+          if type(inherited) ~= "function" then return state end
+          state.sgbPalettes = function(self, g)
+            local zones = inherited(self, g)
+            if not on("enabled") or type(zones) ~= "table" then return zones end
             local monster = self.mon
             local key = monster and Colours.keyFor(monster,
               on("lowhp") and LOW_HP_FRACTION or nil)
-            if not key or not on(key) then return result end
-            local g = graphics()
-            if not g then return result end
-            local gotZones, zones = pcall(palettes, self, self.game)
-            if not gotZones or type(zones) ~= "table" then return result end
+            if not key or not on(key) then return zones end
             local amount = Colours.amountFor(opt("depth"))
+            local out = {}
             for i = 1, #zones do
               local zone = zones[i]
-              if type(zone) == "table" and zone.w and zone.h
-                  and not (zone.w >= 160 and zone.h >= 144) then
-                pcall(paint, g, key, amount, zone.x or 0, zone.y or 0,
-                      zone.w, zone.h)
+              local whole = type(zone) == "table"
+                and (zone.w or 0) >= 160 and (zone.h or 0) >= 144
+              if type(zone) ~= "table" or zone.colors == nil
+                  or zone.colors == false or whole then
+                out[i] = zone
+              else
+                local tinted = {}
+                for k, v in pairs(zone) do tinted[k] = v end
+                tinted.colors = Colours.apply(zone.colors, key, amount)
+                out[i] = tinted
               end
             end
-            return result
+            return out
           end
           return state
         end,

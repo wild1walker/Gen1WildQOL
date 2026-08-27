@@ -255,12 +255,13 @@ local calls = m.__graphics.calls
 eq(#calls, 1, "one rectangle is painted")
 eq(calls[1].w, 160, "the width of the world")
 eq(calls[1].h, 144, "and its height")
-eq(calls[1].blend[1], "multiply",
-  "multiplied, so bright stays bright and dark stays dark")
+eq(calls[1].blend[1], "alpha",
+  "alpha-blended, the way the flash it replaces is -- a multiply showed nothing here")
 ok(calls[1].colour[1] > calls[1].colour[2],
   "and the colour pulls red above green -- the purple")
 ok(calls[1].colour[3] > calls[1].colour[2], "with blue above it too")
-ok(calls[1].colour[2] < 1, "and green pulled down from white, or nothing changes")
+ok(calls[1].colour[4] > 0 and calls[1].colour[4] < 0.5,
+  "at an alpha under the 0.45 the vanilla flash uses, so it never blacks out")
 eq(m.__graphics.depth, 0, "push and pop are balanced, so no state leaks out")
 
 io.write("a healthy party paints nothing\n")
@@ -281,11 +282,11 @@ local ticking = withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }, 
 frame(m, ticking)
 eq(ticking.overworld.poisonFlash, 0,
   "the engine's flash counter is taken to zero, so no black frame is drawn")
-local deep = m.__graphics.calls[1].colour[2]
+local deep = m.__graphics.calls[1].colour[4]
 m.__graphics = stubGraphics()
 frame(m, withWorld({ { hp = 20, stats = { hp = 40 }, status = "PSN" } }))
-local rest = m.__graphics.calls[1].colour[2]
-ok(deep < rest, "and the tick's frame is deeper than the resting tint")
+local rest = m.__graphics.calls[1].colour[4]
+ok(deep > rest, "and the tick's frame is deeper than the resting tint")
 
 io.write("REPLACE FLASH off hands the flash back\n")
 m.stored.replace_flash = false
@@ -377,7 +378,7 @@ do
   m.stored.enabled = nil
 end
 
-io.write("the stats page paints the picture and not the page\n")
+io.write("the stats page shifts the picture's palette, and paints nothing\n")
 local registered
 local function stubModWithScreens()
   local mm = stubMod()
@@ -393,17 +394,19 @@ do
   ok(registered ~= nil, "a screen is registered")
   eq(registered and registered.id, "SummaryMenu", "under the engine's own id")
 
-  -- what SummaryMenu answers: an HP-bar palette over the whole screen, plus
-  -- one zone over the picture.  The picture's rect is read back from that
-  -- rather than hard-coded, so the engine can move it.
-  local WHOLE = { x = 0, y = 0, w = 160, h = 144, colors = {} }
-  local PIC = { x = 8, y = 0, w = 56, h = 56, colors = {} }
+  -- SummaryMenu answers with an HP-bar palette over the whole screen plus one
+  -- zone over the picture.  Only the second is the picture's.
+  local WHOLE = { x = 0, y = 0, w = 160, h = 144,
+                  colors = { { 255, 255, 255 }, { 170, 170, 170 },
+                             { 85, 85, 85 }, { 0, 0, 0 } } }
+  local PIC = { x = 8, y = 0, w = 56, h = 56,
+                colors = { { 255, 255, 255 }, { 170, 170, 170 },
+                           { 85, 85, 85 }, { 0, 0, 0 } } }
   local Builtin = {}
   Builtin.__index = Builtin
   function Builtin.new(_, mon)
-    local self = setmetatable({ mon = mon, game = {}, drew = 0 }, Builtin)
+    local self = setmetatable({ mon = mon, game = {} }, Builtin)
     self.sgbPalettes = function() return { WHOLE, PIC } end
-    self.draw = function(me) me.drew = me.drew + 1 end
     return self
   end
 
@@ -413,26 +416,25 @@ do
   package.loaded["src.ui.SummaryMenu"] = Builtin
   local poisoned = registered.record.new({},
     { hp = 20, stats = { hp = 40 }, status = "PSN" })
-  poisoned:draw()
+  local zones = poisoned:sgbPalettes({})
   package.loaded["src.ui.SummaryMenu"] = saved
 
-  eq(poisoned.drew, 1, "the engine's own draw still runs, exactly once")
-  eq(#painted.calls, 1, "one rectangle is painted")
-  eq(painted.calls[1].x, 8, "over the picture's own rect")
-  eq(painted.calls[1].w, 56, "at its width")
-  eq(painted.calls[1].h, 56, "and its height")
-  ok(painted.calls[1].colour[1] > painted.calls[1].colour[2],
-    "in the purple")
-  eq(painted.calls[1].blend[1], "multiply",
-    "multiplied, so the picture keeps its own light and dark")
+  eq(#painted.calls, 0,
+    "nothing is painted over the picture -- a rect there turns its white "
+    .. "background into a lavender block")
+  eq(zones[1].colors, WHOLE.colors, "the full-screen bar palette is left alone")
+  ok(zones[2].colors ~= PIC.colors, "the picture's palette is replaced")
+  ok(zones[2].colors[2][1] > zones[2].colors[2][2], "and wears the purple")
+  ok(zones[2].colors[1][1] > 200,
+    "while its lightest shade stays light, so the well stays a white well")
+  eq(zones[2].x, PIC.x, "the rect is untouched")
+  eq(PIC.colors[2][1], 170, "and the engine's table was not written through")
 
-  painted = stubGraphics()
-  m2.__graphics = painted
   package.loaded["src.ui.SummaryMenu"] = Builtin
   local healthy = registered.record.new({}, { hp = 40, stats = { hp = 40 } })
-  healthy:draw()
+  local plain = healthy:sgbPalettes({})
   package.loaded["src.ui.SummaryMenu"] = saved
-  eq(#painted.calls, 0, "a healthy POKeMON's picture is painted over not at all")
+  eq(plain[2].colors, PIC.colors, "a healthy POKeMON's picture is untouched")
 end
 
 -- ------- through the whole bundle

@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.8.2
+
+Two fixes, and the second undoes something 1.8.1 got wrong.
+
+### The world tint is alpha-blended, and now actually appears
+
+It was multiplied. That worked on an opaque menu and did **nothing** on the map
+-- the overworld draws into a canvas of its own, and a multiply against it does
+not survive the composite the way a straight alpha blend does. The screenshots
+showed exactly that split: the stats page changed, the overworld did not.
+
+The thing being replaced was never multiplied either. The engine's own poison
+flash is `setColor(0, 0, 0, 0.45)` and a rectangle in the **default** blend
+mode, which is the one blend proven to land where this paints. So this is that
+rectangle in a colour, held instead of pulsed, with its alpha scaled off the
+tint depth and topping out near the same 0.45 -- the strongest it ever gets is
+about as strong as the thing it took away, in colour, and never a blackout.
+
+### The stats page goes back to shifting the picture's palette
+
+1.8.1 painted a rectangle over the picture and that was wrong: the zone covers
+the picture **well**, background included, so the white square behind the
+POKéMON became a lavender block. It shifts the four colours the picture is
+drawn through again -- the well's background is colour 0 of the species
+palette, an off-white, so it stays an off-white.
+
+The cost of that is honest and unchanged: a picture drawn from full-colour art
+sits the shade-remap pass out by design, so this tints nothing for such a pack.
+A lavender box for everyone is worse than no tint for some. Tinting the sprite
+and not its background needs a seam to set a colour around the sprite's own
+draw, and the engine does not offer one on that screen.
+
 ## 1.8.1
 
 The stats page picture is **painted** rather than palette-shifted, which closes
