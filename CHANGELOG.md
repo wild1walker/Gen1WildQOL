@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.15.0
+
+**`AUTO SAVE` no longer treats a route seam as a door** (Gen1AutoSave 1.11.0).
+
+Every map change was being treated as a warp — worth saving for, and a free
+frame to save in. Neither is true of the ones with no screen in front of them.
+Walking from Route 1 into Viridian is seamless: the routes are stitched
+together, the map scrolls on, and you are mid-stride the whole way across. So
+the save landed in the exact frame this mod exists to avoid, for a crossing
+that is not progress worth stopping for.
+
+The engine already says which is which, and this was not asking. `map.entered`
+carries a `via`: `warp` and `fly` have a screen; `connection` (a route seam),
+`reload` (a mod rebuilding the map underfoot), `boot` and `continue` do not.
+Only the first two count now, for both jobs at once — **a seam neither writes a
+save nor asks for one.**
+
+A save that was already due survives the crossing and goes at the next real
+window: a door, a battle, a conversation, a menu, or a real stop.
+
 ## 1.14.1
 
 **The stutter at an autosave is gone** (Gen1AutoSave 1.10.0), and it was the
