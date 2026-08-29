@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.20.0
+
+### Added
+
+- **`MAP ON SELECT`** puts the town map on the `SELECT` field-move menu,
+  outdoors. Off by default — that menu earns its place by being short and by
+  being only what is usable where you are standing, so a row nobody asked for
+  is worse than no row. Under `EASY INTERACTIONS`, with the rest of that
+  menu's settings.
+
+- **Other mods can put rows on that menu.** It is built fresh on every press
+  out of what is usable *right now* — `FLY` only outdoors, `FLASH` only in the
+  dark, a repel only while one is in the bag — and until now this file was the
+  only thing allowed an opinion about what was on it.
+
+  ```lua
+  local qol = mod.find("Gen1WildQOL")
+  qol.exports.fieldMenu.provide(function(game, ow, rows)
+    rows[#rows + 1] = { id = "mine", label = "MINE", onSelect = ... }
+    return rows
+  end, mod.id)
+  ```
+
+  A registry rather than a hook, because `mod.hooks` gives a mod `wrap` and no
+  way to emit one of its own; Gen1Dex's `area.provide` is the same answer to
+  the same problem. Rows land above `CANCEL`, which stays the floor of the
+  menu. A provider that raises is skipped and said so once — a menu that fails
+  to open because somebody else's row threw is a worse bug than a missing row.
+  Gating is the provider's business; this only promises that what *it* put
+  there is usable here.
+
+### Changed
+
+- **Every row on that menu carries an `id`.** A label is what a row says, and
+  it moves with the language and with which repel is in the bag. An id is what
+  the row *is* — and anything that wants to reorder the list, hide a row or add
+  one needs a name for a row that is not on screen at the moment.
+
 ## 1.19.0
 
 **`AUTO SAVE` no longer writes while a menu is up** (Gen1AutoSave 1.15.0).
