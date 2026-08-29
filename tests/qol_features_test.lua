@@ -202,38 +202,34 @@ do
 
   local items = openMenu()
   ok(items ~= nil, "SELECT opens the menu")
-  eq(idsOf(items), "fly,cancel",
+  -- MAP has no switch of its own: it is offered outdoors like any other row,
+  -- and the layout editor is what takes it away.  It had one, and that was one
+  -- switch too many the moment this menu became arrangeable -- the editor
+  -- listed MAP, said ON, and toggling it did nothing.
+  eq(idsOf(items), "fly,map,cancel",
     "with a row for every field move usable here, each carrying its id")
 
-  -- MAP is off by default and appears when the row is turned on
-  options.qol_select_map = true
-  eq(idsOf(openMenu()), "fly,map,cancel", "MAP ON SELECT adds the town map")
-  options.qol_select_map = false
-  eq(idsOf(openMenu()), "fly,cancel", "and turning it off takes it away again")
-
   -- indoors there is no map to open, the same reason FLY is outdoors-only
-  options.qol_select_map = true
   ow.map.def.outside = false
   local inside = openMenu()
   ok(inside == nil or not idsOf(inside):find("map", 1, true),
-    "and it is not offered indoors")
+    "MAP is not offered indoors")
   ow.map.def.outside = true
-  options.qol_select_map = false
 
   -- another mod's row, and where it lands
   local remove = mod.exports.fieldMenu.provide(function(_, _, rows)
     rows[#rows + 1] = { id = "mine", label = "MINE", onSelect = function() end }
     return rows
   end, "someone")
-  eq(idsOf(openMenu()), "fly,mine,cancel",
+  eq(idsOf(openMenu()), "fly,map,mine,cancel",
     "a provider's row lands above CANCEL, which stays the floor")
   remove()
-  eq(idsOf(openMenu()), "fly,cancel", "and removing the provider takes it away")
+  eq(idsOf(openMenu()), "fly,map,cancel", "and removing the provider takes it away")
 
   -- a provider that raises is skipped, and the menu still opens
   mod.exports.fieldMenu.provide(function() error("boom", 0) end, "bad")
   logged = {}
-  eq(idsOf(openMenu()), "fly,cancel",
+  eq(idsOf(openMenu()), "fly,map,cancel",
     "a provider that raises does not take the menu down with it")
   ok(#logged > 0, "and it is said once")
   local before = #logged
