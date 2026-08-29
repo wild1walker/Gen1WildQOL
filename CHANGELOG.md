@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.17.1
+
+**The black screen plays out when you walk through a door** (Gen1AutoSave
+1.13.1). 1.16.1 fixed half of this and shipped with the other half still in.
+
+The remaining half was `AUTO SAVE` calling the warp fade the quietest frame it
+could ask for. That was exactly backwards. A fade is an animation: thirty-two
+logic steps of the palette walking down to black, and freezing for a fifth of a
+second in the middle of one is a stall you can watch happen. The mod now treats
+a transition as a frame it must not take, and it checks that *before* the test
+that says "there is a screen over the overworld, go ahead" -- because a
+transition is such a screen and was being waved through by it.
+
+The clamp that keeps the frame after a save from being paid back as a burst of
+logic steps is also armed properly now. It used to look for the sync reply's
+expensive frame by watching a queue empty over the call; the plan that runs on
+that frame refills the queue before the call returns, so the check compared two
+identical values and never once fired. It times the call instead.
+
 ## 1.17.0
 
 **`OPTIONS > MODS` is now `OPTIONS > WILD GREEN`.** The suite's door used to

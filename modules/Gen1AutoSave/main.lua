@@ -283,8 +283,19 @@ return function(mod)
     local ow = game and game.overworld
     -- No overworld at all: a title screen, the mod manager, a save select.
     if not (ow and ow.player) then return true end
+    -- A FADE IS AN ANIMATION.  This used to say the opposite -- a transition
+    -- was the freest frame there was, because nothing of the map is on screen
+    -- -- and that was wrong twice over.  The warp fade is thirty-two logic
+    -- steps of a palette walking down to black, so freezing for a fifth of a
+    -- second in the middle of it is a stall you can see; and the steps are
+    -- counted per logic step, so the oversized frame afterwards is paid back
+    -- as a burst that runs the rest of the fade before anything is drawn.
+    -- Between them, walking through a door came out as a pop.
+    --
+    -- Ahead of screenOver, because the transition IS a screen over the
+    -- overworld and would have been called quiet by the line below.
+    if ow.transitioning or ow.teleportOut then return false end
     if screenOver(game) then return true end
-    if ow.transitioning or ow.teleportOut then return true end
     if ow.player.moving then return false end
     if walking(game, ow) then return false end
     if scriptRunning(ow) then return false end
@@ -610,6 +621,17 @@ return function(mod)
   -- unaffected either way.
   local fixedStep, fixedStepTried = nil, false
 
+  -- Half a frame at 60Hz.  os.clock is one of the four os functions the mod
+  -- sandbox keeps; a host without it simply never measures a hitch, and the
+  -- write path's own absorb is unconditional either way.
+  local HITCH_FLOOR = 0.008
+
+  local function clockNow()
+    if type(os) ~= "table" or type(os.clock) ~= "function" then return nil end
+    local ok, now = pcall(os.clock)
+    return ok and now or nil
+  end
+
   local function absorbHitch()
     if not fixedStepTried then
       fixedStepTried = true
@@ -766,12 +788,20 @@ return function(mod)
         and self.pending
         and not quietFrame(state.game)
       if hold then return end
-      -- A cycle's expensive half is the plan, and the plan runs on the frame
-      -- the reply lands on -- which is this one, if `pending` clears over the
-      -- call.  Same hitch, same remedy.
-      local hadReply = self.pending ~= nil
+      -- A cycle's expensive half is the plan, and it runs on the frame the
+      -- reply lands on.  TIME THE CALL rather than trying to read that off
+      -- `pending`: _planFrom queues the uploads it decided on and the task
+      -- loop at the end of the same update starts the next one, so pending
+      -- goes non-nil -> nil -> non-nil inside one call and a before/after
+      -- comparison sees nothing happen at all.  That is what the first
+      -- attempt at this checked, and it never once fired.
+      --
+      -- A tick with nothing to do is a table lookup and a poll.  Anything
+      -- past half a frame did real work, and real work in one frame is the
+      -- hitch this is here to absorb.
+      local started = clockNow()
       local result = update(self, dt)
-      if hadReply and self.pending == nil then absorbHitch() end
+      if started and clockNow() - started >= HITCH_FLOOR then absorbHitch() end
       return result
     end
   end
