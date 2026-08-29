@@ -130,8 +130,9 @@ been on screen: this menu shows `FLY` only outdoors and `FLASH` only in the
 dark, so an editor that knew only what it had seen could arrange almost none of
 it.
 
-`MAP ON SELECT` is the first row built on that: the town map, outdoors, off by
-default.
+`MAP` is the first row built on that: the town map, outdoors. It has no switch
+of its own — the layout editor is what takes a row off this menu, and a second
+switch for the same row is how you get one that reads `ON` and is not there.
 
 ## What is different from the standalone mods
 

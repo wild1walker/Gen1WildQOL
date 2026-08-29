@@ -70,28 +70,6 @@ local REPEL_PROMPT_SUBFEATURE = {
   },
 }
 
--- The town map on the SELECT menu, for anyone who would rather look than
--- walk.  Outdoors only, for the same reason FLY is: it is the overworld's own
--- map and a basement is not on it.
---
--- Off by default.  This row is a convenience rather than a field move, and a
--- menu that grows a row nobody asked for is worse than one that does not --
--- the SELECT menu earns its place by being short and by being only what is
--- usable here.
-local SELECT_MAP_SUBFEATURE = {
-  option = {
-    key = "qol_select_map",
-    label = "MAP ON SELECT",
-    type = "toggle",
-    default = false,
-  },
-  menu = {
-    label = "MAP ON SELECT",
-    key = "qol_select_map",
-    description = "PUTS THE TOWN MAP\nON THE (SELECT)\fMENU, OUTDOORS.",
-  },
-}
-
 local feature = {
   option = {
     key = "qol_easy_interactions",
@@ -131,7 +109,6 @@ local feature = {
     },
     WATER_INTERACTION_SUBFEATURE,
     REPEL_PROMPT_SUBFEATURE,
-    SELECT_MAP_SUBFEATURE,
   },
 }
 
@@ -445,12 +422,21 @@ local function installGen1(mod, services)
         ow:beginTeleportOut()
       end }
     end
-    -- The town map, for anyone who would rather look than walk.  Outdoors
-    -- only, for the same reason FLY is: it is the overworld's own map and a
-    -- basement is not on it.  Off by default -- this row is a convenience,
-    -- not a field move, and a menu that grows a row nobody asked for is worse
-    -- than one that does not.
-    if outside and optionValue(game, "qol_select_map") == true then
+    -- The town map, for anyone would rather look than walk.  Outdoors only,
+    -- for the same reason FLY is: it is the overworld's own map and a basement
+    -- is not on it.
+    --
+    -- Offered outright, with no switch of its own.  It had one -- MAP ON
+    -- SELECT, off by default -- and that was one switch too many the moment
+    -- this menu became arrangeable: the layout editor listed MAP, said ON, and
+    -- toggling it did nothing, because the thing actually keeping the row off
+    -- was an option two screens away.  A row that reads ON and is not there is
+    -- worse than a row you did not ask for.
+    --
+    -- So the layout is the switch, for this row and every other: hide it in
+    -- the editor and it is gone.  Without the editor installed it is simply a
+    -- row on the menu, which is what it was asked for as.
+    if outside then
       items[#items + 1] = { id = "map", label = "MAP", onSelect = function()
         mod.ui.push(game, "TownMap", {})
       end }

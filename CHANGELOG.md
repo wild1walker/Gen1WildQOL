@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.22.0
+
+### Fixed
+
+- **`MAP` had two switches and only one of them worked.** The layout editor
+  listed `MAP` on the `SELECT` menu, said `ON`, and toggling it did nothing —
+  because what was actually keeping the row off was `MAP ON SELECT`, an option
+  two screens away. A row that reads `ON` and is not there is worse than a row
+  you did not ask for.
+
+  `MAP ON SELECT` is gone. The town map is offered outdoors like every other
+  row on that menu, and the layout is the switch: hide it in the editor and it
+  is gone. Without the editor installed it is simply a row on the menu.
+
+- **The editor's empty page ran off its own box**, and its title carried two
+  characters the Game Boy font cannot draw. `NOTHING TO ARRANGE` is exactly
+  eighteen glyphs and the box's interior is eighteen tiles, so starting it a
+  column in put the last two on the border; and `<` and `>` are not in
+  `charmap.asm`, so the arrows drew as nothing and only pushed the title right.
+  The page count (`1/3`) says the same thing in glyphs the font has.
+
+- **A row the menu is not offering no longer reads `ON`.** Switching on a
+  catalog row cannot put it on the menu when what keeps it off is the game and
+  not the layout — no `FLY` in the party, no repel in the bag, daylight. Those
+  read `----` now, the same as a pin you have not unlocked.
+
+  (Gen1MenuManager 0.3.2.)
+
 ## 1.21.1
 
 ### Fixed
