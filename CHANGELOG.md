@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.13.1
+
+**`AUTO SAVE` never writes into a stride now** (Gen1AutoSave 1.7.0). 1.13.0
+moved a due save onto the screens the game already blacks out -- a warp's fade,
+a battle's return hold -- and that part worked. Two things in it still put a
+write on a moving screen, which is the whole thing it was meant to stop.
+
+The first was a 45-second cap on the waiting: a save that had not found a black
+screen in that long was written on the route instead, on the reasoning that a
+player who had not warped or fought in three quarters of a minute was standing
+somewhere quiet. It never checked that they had *stopped*. So it waited out the
+one window where the write would have been free and then gave up and wrote into
+the walk.
+
+The second is older, and is why this was reported in the first place. The write
+was refused while the player was `moving`, and that flag drops for the single
+frame between two strides -- so somebody walking a long route without stopping
+satisfied "not moving" several times a second, and that gap is precisely where
+a dropped frame is seen.
+
+Idle means standing still now. A held direction says the next stride begins on
+the next frame, so nothing is written into it. With that in place the cap is
+not needed and is gone: a due save waits for as long as the walking lasts and
+leaves by one of three doors -- a warp, the end of a battle, or you stopping.
+There is no fourth.
+
+
 ## 1.13.0
 
 **Everything the suite can change is now one row on the game's own OPTION
