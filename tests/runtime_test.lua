@@ -1003,12 +1003,18 @@ local function fakeGame(otherMods)
     loaded[#loaded + 1] = { id = entry.id, name = entry.name }
     schemas[entry.id] = entry.schema
   end
+  -- The engine reports both: `loaded` is what is running, `available` is what
+  -- is installed, enabled or not.  One extra here that is installed and off,
+  -- so a count taken off the wrong list is visible.
+  local available = { { id = "shelved", name = "Shelved" } }
+  for _, manifest in ipairs(loaded) do available[#available + 1] = manifest end
+
   game.mods = {
     optionSchemas = schemas,
     modOptions = {},
     emitted = {},
     status = function(self_)
-      return { loaded = loaded, cart = self_.cart }
+      return { loaded = loaded, available = available, cart = self_.cart }
     end,
     cartStatus = function(self_) return self_.cart end,
     events = { emit = function(self_, name, payload)
@@ -1080,8 +1086,8 @@ do
 
   local root = screenOf(mod, "Gen1WildQOL")
   ok(root, "the root screen is registered")
-  eq(labelsOf(root), "OUT IN THE WORLD,YOUR POKEMON,LOOSE",
-     "cards in declared order, then whatever named no card")
+  eq(labelsOf(root), "OUT IN THE WORLD,YOUR POKEMON,LOOSE,MOD MANAGER",
+     "cards in declared order, then whatever named no card, then the manager")
   eq(root.entries[1].kind, "card", "a card is a card")
   eq(root.entries[3].kind, "feature", "and a feature that named none is a row")
   ok(mod.screens["Gen1WildQOL__battles"],
@@ -1140,22 +1146,162 @@ do
   local function vanilla()
     return { { id = "textSpeed" }, { id = "mods" }, { id = "tilt" } }
   end
+  -- The door takes the MODS row's place rather than sitting beside it: with
+  -- the suite installed, the manager is one press further in, and two rows
+  -- that both mean "the mods" is the confusion this replaces.
   local out = wrapper(function(_, rows) return rows end, game, vanilla())
-  eq(#out, 4, "one row added")
-  eq(out[3].id, "gen1wild_options", "next to MODS, where the player just was")
-  eq(out[3].label, "GEN1_WILD_QOL",
+  eq(#out, 3, "the row count is unchanged -- the door took a seat, not a new one")
+  eq(out[2].id, "gen1wild_options", "in the slot MODS used to hold")
+  eq(out[2].label, "GEN1_WILD_QOL",
      "named after this bundle when no cart is running")
-  eq(out[3].group, true, "and marked as a folder card, which is what it is")
+  eq(out[2].group, true, "and marked as a folder card, which is what it is")
+
+  local leftover = {}
+  for _, row in ipairs(out) do leftover[#leftover + 1] = row.id end
+  eq(table.concat(leftover, ","), "textSpeed,gen1wild_options,tilt",
+     "and the row it replaced is gone rather than doubled up")
 
   -- The other half of the suite runs the same hook. Two identical doors onto
   -- the same menu is the thing this id is for.
   local twice = wrapper(function(_, rows) return rows end, game, out)
-  eq(#twice, 4, "the other half finds the row already there and leaves it")
+  eq(#twice, 3, "the other half finds the row already there and leaves it")
+
+  -- Without the engine's own row to take over -- an older build, or another
+  -- mod that already removed it -- the door still has to appear somewhere.
+  local noMods = wrapper(function(_, rows) return rows end, game,
+                         { { id = "textSpeed" }, { id = "tilt" } })
+  eq(#noMods, 3, "with no MODS row to replace, the door is appended")
+  eq(noMods[3].id, "gen1wild_options", "at the end, where it can be found")
 
   -- A cart names the row instead: WILD GREEN is what the player installed.
   game.mods.cart = { title = "Wild Green", pins = { gen1_wild_qol = {} } }
   local carted = wrapper(function(_, rows) return rows end, game, vanilla())
-  eq(carted[3].label, "WILD GREEN", "a cart's own title names the door")
+  eq(carted[2].label, "WILD GREEN", "a cart's own title names the door")
+end
+
+-- ------------------------------------- the manager, one press further in
+
+do
+  io.write("the mod manager keeps a row on the menu that took its place\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local features = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local mod, spec = menuFixture("gen1_wild_qol", "Gen1WildQOL", "gen1_wild_ui",
+                                features)
+  Bundle.install(mod, spec, features)
+
+  -- This row is the whole reason taking the MODS slot is not a removal, so
+  -- it has to be there, and A on it has to reach the manager itself.
+  local game = fakeGame({
+    { id = "other", name = "Other", schema = {
+      { key = "on", type = "toggle", label = "ON", default = true } } },
+  })
+  local pressed = {}
+  game.input = {
+    wasPressed = function(_, button) return pressed[button] == true end,
+  }
+  local screen = mod.screens["Gen1WildQOL"].new(game)
+
+  local manager = screen.entries[#screen.entries]
+  eq(manager.kind, "manager", "the manager sits last, under the cards")
+  eq(manager.label, "MOD MANAGER", "and says what it opens")
+  eq(screen:valueOf(manager), "2 INSTALLED",
+     "reading what is installed rather than a setting it does not have")
+
+  -- Not a setting: LEFT and RIGHT on it must not write anything, because
+  -- there is nothing on this row to cycle.
+  local before = game.writes
+  screen.index = #screen.entries
+  pressed = { left = true }
+  screen:update()
+  pressed = { right = true }
+  screen:update()
+  eq(game.writes, before, "left and right on it change nothing")
+
+  local opened = {}
+  mod.ui.push = function(_, id) opened[#opened + 1] = id end
+  screen.index = #screen.entries
+  pressed = { a = true }
+  screen:update()
+  eq(table.concat(opened, ","), "ManagerState",
+     "and A opens the manager the OPTION screen used to open directly")
+end
+
+-- ------------------------------------------ the START menu's MODS entry
+
+do
+  io.write("START > MODS lands on the suite menu when the suite is installed\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local features = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local mod, spec = menuFixture("gen1_wild_qol", "Gen1WildQOL", "gen1_wild_ui",
+                                features)
+  Bundle.install(mod, spec, features)
+
+  local wrapper
+  for _, entry in ipairs(mod.hooked) do
+    if entry.name == "ui.start_menu.items" then wrapper = entry.fn end
+  end
+  ok(wrapper, "the bundle hooks the START menu's item list")
+
+  local game = fakeGame()
+  local opened = {}
+  mod.ui.push = function(_, id) opened[#opened + 1] = id end
+
+  local function vanilla()
+    local reached = {}
+    return {
+      { id = "pokemon", label = "POKEMON", onSelect = function() end },
+      { id = "mods", label = "MODS",
+        onSelect = function() reached[#reached + 1] = "manager" end },
+      { id = "quit", label = "QUIT", onSelect = function() end },
+    }, reached
+  end
+
+  local items, reached = vanilla()
+  local out = wrapper(function(_, i) return i end, game, items)
+  eq(#out, 3, "the entry is retargeted, not added to or taken away")
+  eq(out[2].label, "MODS", "it keeps its name and its place")
+  out[2].onSelect()
+  eq(table.concat(opened, ","), "Gen1WildQOL",
+     "and now opens the suite menu instead of the manager")
+  eq(#reached, 0, "the manager it used to open is not opened on the way")
+
+  -- The other half of the suite wraps the same hook; routing an already
+  -- routed entry twice would stack one push on another.
+  opened = {}
+  mod.ui.push = function(_, id) opened[#opened + 1] = id end
+  local twice = wrapper(function(_, i) return i end, game, out)
+  twice[2].onSelect()
+  eq(table.concat(opened, ","), "Gen1WildQOL",
+     "the other half finds the entry already routed and leaves it alone")
+
+  -- An entry the engine gave no id, only the label the player reads.
+  opened = {}
+  local unlabelled = wrapper(function(_, i) return i end, game, {
+    { label = "MODS", onSelect = function() end },
+  })
+  unlabelled[1].onSelect()
+  eq(table.concat(opened, ","), "Gen1WildQOL", "matched by label where there is no id")
+
+  -- And a menu with no MODS entry at all -- another mod may have taken it --
+  -- must come back untouched rather than grow one.
+  local none = wrapper(function(_, i) return i end, game, {
+    { id = "pokemon", label = "POKEMON" },
+  })
+  eq(#none, 1, "with no MODS entry there is nothing to retarget")
 end
 
 -- ------------------------------------------- both halves, one merged menu
@@ -1193,14 +1339,14 @@ do
      "and a writer, so the other half's row is a switch and not a readout")
 
   -- Before the two find each other, each menu is its own.
-  eq(labelsOf(screenOf(qol, "Gen1WildQOL")), "OUT IN THE WORLD",
+  eq(labelsOf(screenOf(qol, "Gen1WildQOL")), "OUT IN THE WORLD,MOD MANAGER",
      "with one half installed the menu is that half's")
 
   qol.found["gen1_wild_ui"] = { id = "gen1_wild_ui", version = "1.0.0",
                                 exports = ui.exports }
 
   local root = screenOf(qol, "Gen1WildQOL")
-  eq(labelsOf(root), "OUT IN THE WORLD,YOUR POKEMON,BATTLES",
+  eq(labelsOf(root), "OUT IN THE WORLD,YOUR POKEMON,BATTLES,MOD MANAGER",
      "with both installed, either menu is the whole suite")
 
   local battles = screenOf(qol, "Gen1WildQOL__battles")
@@ -1249,7 +1395,7 @@ do
   local factory = mod.screens["Gen1WildQOL"]
   local game = fakeGame(others)
   local root = factory.new(game)
-  eq(labelsOf(root), "OUT IN THE WORLD,OTHER MODS",
+  eq(labelsOf(root), "OUT IN THE WORLD,OTHER MODS,MOD MANAGER",
      "the rest of what is loaded gets a card of its own, last")
   eq(root:valueOf(root.entries[2]), "1 MODS",
      "counting only the ones that have settings")
@@ -1304,12 +1450,22 @@ do
     declared[group.id] = group.label
     order[i] = group.id
   end
-  eq(table.concat(order, ","), "world,pokemon,battles,items,saving,setup",
+  eq(table.concat(order, ","), "general,pokemon,battle,items,save,interface",
      "the cards, in the order both halves draw them")
 
   -- The labels are drawn on the card, so they are part of the agreement too.
-  eq(declared.world, "OUT IN THE WORLD", "world reads as a place")
-  eq(declared.setup, "MOD SETUP", "and the furniture says what it is")
+  -- They are the plain names for what is on them: a player looking for the
+  -- battle settings should not have to guess which invented phrase means
+  -- "battle".
+  eq(declared.general, "GENERAL", "a card says the plain name of what is on it")
+  eq(declared.interface, "INTERFACE", "and so does the last one")
+
+  -- Every card carries the line the menu prints under it.  A card with no
+  -- description is a card that explains nothing about what is behind it.
+  for _, group in ipairs(groups or {}) do
+    ok(type(group.description) == "string" and group.description ~= "",
+       group.id .. " says what is on it")
+  end
 
   local homeless = {}
   for _, feature in ipairs(registry.features) do
