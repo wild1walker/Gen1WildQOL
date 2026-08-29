@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.21.0
+
+**The `SELECT` field menu is arrangeable** (Gen1MenuManager 0.3.0).
+
+`MENU LAYOUT` could arrange the START menu and the PC menu. The overworld
+`SELECT` menu — `FLY`, `TELEPORT`, `FLASH`, `DIG`, a repel, and now `MAP` —
+was the one menu in front of you it could not touch, because that menu is not
+the engine's and has no hook to wrap.
+
+It joins the row registry 1.20.0 published instead. Same arrangement as
+everywhere else, in the other direction: everywhere else the manager runs
+outermost on a hook so it sees the finished list; here the registry hands it
+the finished list directly.
+
+There are three menus now and one row on the OPTION screen, so **LEFT and RIGHT
+walk between them in the editor** — the only keys it was not already using.
+They do nothing while a row is grabbed. `CANCEL` is locked on the field menu:
+`B` closes it too, but a way out you can *see* is not the same as one you have
+to know about.
+
+New row: `SELECT ROW` puts `MENU MGR` on that menu. Off by default, unlike the
+START and PC rows — that menu earns its place by being short, and it is
+arrangeable from the OPTION screen without it.
+
 ## 1.20.0
 
 ### Added

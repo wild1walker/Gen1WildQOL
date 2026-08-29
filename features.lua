@@ -116,7 +116,12 @@ return {
       -- REPEL PROMPT ships on, CUT GRASS inherits this row until set.
       enabledKey = "qol_easy_interactions",
       default = true,
-      aliases = { "qol_easy_interactions" },
+      -- FieldMenu is the name the SELECT menu's row registry answers to.
+      -- Purpose-named rather than dir-named: three features share the
+      -- QualityOfLife directory and only this one publishes that surface, so
+      -- a sibling asking for it should not have to know which folder it lives
+      -- in or guess between the three.
+      aliases = { "qol_easy_interactions", "FieldMenu" },
     },
     {
       id = "banners",
