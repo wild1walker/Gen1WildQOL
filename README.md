@@ -134,6 +134,53 @@ it.
 of its own — the layout editor is what takes a row off this menu, and a second
 switch for the same row is how you get one that reads `ON` and is not there.
 
+## Your settings survive the cart's seal
+
+Wild Green is a **sealed** cart, and a sealed cart's per-mod options are not
+the player's. `Loader:_applyCart` rebuilds `loader.modOptions` on every boot
+out of what the cart pins and discards the stored values:
+
+```lua
+for id, pin in pairs(report.pins) do
+  local bucket = {}
+  for key, value in pairs(pin.options or {}) do bucket[key] = value end
+  if not report.enforced then
+    for key, value in pairs(self.modOptions[id] or {}) do bucket[key] = value end
+  end
+  merged[id] = bucket
+end
+```
+
+`enforced` is true for any seal that is not `open`, so `sealed` and `sealed+`
+both do it. On this cart that meant every setting in the suite reset on the
+next launch — and one of them, Wild Green's `PLAYER`, could never take effect
+at all: the overworld walker is a record read at load, and the load is exactly
+when the choice was being thrown away.
+
+**Unsealing is not the answer.** Online play requires the seal and requires it
+to be exactly `sealed`: `ArenaData.profile` refuses any other value, and the
+online panel lists no other kind. `open` would keep the settings and lose the
+arena.
+
+So `runtime/settings.lua` remembers what you chose in this bundle's own cache —
+installation-wide, and untouched by that merge — and puts it back as the bundle
+installs, which is before anything reads it. This bundle is first in the cart's
+load order, which is what puts the restore ahead of the mod whose option is read
+at load time.
+
+It restores into **the same table the engine's mod manager reads**, so there is
+no second source of truth: the manager, this suite's own menu and the mods
+themselves all see one value, and it is yours.
+
+Nothing here touches the cart file, and the cart file is what online matches on
+— `ArenaData.profile` keys its fingerprint on `CartStore`'s hash of the
+manifest, never on live option values. The seal keeps every guarantee the arena
+asks of it.
+
+The trade is that the cart's pins become **defaults rather than locks**: a
+pinned value is what you get until you choose otherwise. A cart that needs a
+value fixed for everybody should pin it and not ship this.
+
 ## What is different from the standalone mods
 
 - **EXP SHARE defaults to GEN 5+.** The fighters keep their full experience and

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.23.0
+
+### Fixed
+
+- **Your settings survive a reboot again.** Wild Green is a sealed cart, and a
+  sealed cart's per-mod options are not the player's: the loader rebuilds them
+  on every boot out of what the cart pins and discards the stored values. Every
+  setting in the suite reset on the next launch — and `PLAYER` could never take
+  effect at all, because the overworld walker is a record read at load and the
+  load is exactly when the choice was being thrown away.
+
+  Unsealing is not the answer: online play requires the seal, and requires it
+  to be exactly `sealed`. So the bundle remembers what you chose in its own
+  cache — which that merge does not touch — and puts it back as it installs,
+  before anything reads it. It is first in the cart's load order, which is what
+  puts the restore ahead of the mod whose option is read at load time.
+
+  It restores into the same table the mod manager reads, so there is no second
+  source of truth: the manager, this suite's menu and the mods themselves all
+  see one value.
+
+  The cart's pins become defaults rather than locks — a pinned value is what
+  you get until you choose otherwise. Nothing here touches the cart file, which
+  is what online matches on, so the seal keeps every guarantee the arena asks
+  of it.
+
 ## 1.22.0
 
 ### Fixed
