@@ -8,6 +8,9 @@
 --     black screen, a battle starting or ending, a text box while somebody
 --     talks, any menu -- or for you to really stop, which is three unbroken
 --     seconds and not the frame between two strides
+--   * a route seam is not a door.  Walking from one route into the next is
+--     seamless -- no screen, and the player mid-stride the whole way across --
+--     so it neither writes a save nor asks for one
 --   * and the sync cycle the write wakes, which is the expensive half and
 --     lands seconds later on network time, waits for the NEXT one of those
 --     rather than for the same one: two errands, two windows
@@ -883,9 +886,11 @@ return function(mod)
   end
 
   local CHECKPOINTS = {
-    "battle.ended", "map.entered", "pokemon.caught", "pokemon.evolved",
+    "battle.ended", "pokemon.caught", "pokemon.evolved",
     "egg.hatched", "trade.completed", "world.blacked_out",
   }
+  -- map.entered is not in that list.  It is a checkpoint only sometimes, and
+  -- the engine is the one that knows when -- see enteredBehindAScreen below.
 
   for _, name in ipairs(CHECKPOINTS) do
     mod.events:on(name, function()
@@ -904,10 +909,48 @@ return function(mod)
   end)
   mod.events:on("battle.ended", function() state.inBattle = false end)
 
+  -- ---------- which map changes had a screen in front of them
+  --
+  -- Not all of them do, and the engine says which is which itself:
+  -- map.entered carries `via`, and only some of its words mean the screen
+  -- went black.  A door, a staircase, a cave mouth and FLY all fade out, swap
+  -- the map and fade back.  Walking from Route 1 into Viridian does not --
+  -- routes are stitched together, the map simply scrolls on, and the player
+  -- is mid-stride the whole way across.
+  --
+  -- That distinction is worth two things at once.  A seam is the exact frame
+  -- this mod exists to keep a write out of -- the screen is scrolling and the
+  -- player is running -- and it is also not a checkpoint: crossing from one
+  -- route to the next while running is not progress worth stopping for, it is
+  -- running.  Treating it as a door meant a save every time somebody crossed
+  -- a boundary, written into the walk that carried them over it.
+  --
+  --   warp        a door, stairs, a cave, a mod's own warp   -- has a screen
+  --   fly         FLY, which has an animation of its own     -- has a screen
+  --   connection  a route seam: seamless, no screen at all
+  --   reload      a mod rebuilding the map under the player's feet, in place
+  --   boot        the game has just started; nothing new to write
+  --   continue    Gen 2's resume, the same
+  --
+  -- An engine too old to say anything at all gets the old answer, so a build
+  -- that predates `via` cannot silently stop saving at doors.
+  local SCREENED_ENTRY = { warp = true, fly = true }
+
+  local function enteredBehindAScreen(event)
+    local via = type(event) == "table" and event.via or nil
+    if via == nil then return true end
+    return SCREENED_ENTRY[via] == true
+  end
+
   -- The two screens the game blacks out on its own.  Both fire while their
   -- transition is still up, so the write lands under it: a warp once the new
   -- map is in place, and a battle in the return hold before the fade back.
-  mod.events:on("map.entered", function()
+  --
+  -- One handler for both jobs, in this order: a warp is what makes the save
+  -- due, and the same frame is where it goes.
+  mod.events:on("map.entered", function(event)
+    if not enteredBehindAScreen(event) then return end
+    if mod.options:get("events") then request() end
     loadScreenWrite(state.game, "warp")
   end)
   mod.events:on("battle.ended", function()
