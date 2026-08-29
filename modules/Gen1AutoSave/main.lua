@@ -578,6 +578,49 @@ return function(mod)
     end
   end
 
+  -- ---------- and the frame after the hitch
+  --
+  -- A save is a hitch inside one logic step, and a hitch inside a logic step
+  -- does not just cost that frame -- it costs the animation running over it.
+  --
+  -- The engine advances logic in whole 1/60 steps out of an accumulator
+  -- (src/core/FixedStep.lua).  A frame that took 60ms hands the NEXT update a
+  -- dt of 60ms, and the accumulator pays that back as four steps in a row
+  -- before anything is drawn again.  Four steps of a fade in one frame is not
+  -- a fade, it is a cut: the black screen a warp puts up gets skipped and the
+  -- player pops into the new map.
+  --
+  -- The engine knows this and has a remedy for its own hitches:
+  -- FixedStep:discardCatchup drops the pending catch-up and absorbs the
+  -- oversized frame as a single step, so the animation plays out step by step
+  -- and simply takes a little longer in wall-clock.  OverworldState:
+  -- crossConnection calls it after a map seam for exactly this reason.
+  --
+  -- It is not called for a warp.  FixedStep's own comment says so in as many
+  -- words -- "crossConnection ... is the only caller of discardCatchup, and
+  -- warps go through Transition instead" -- so a hitch under a warp's fade has
+  -- nothing arming the clamp, and ours was the hitch.
+  --
+  -- So arm it ourselves, after anything of ours that costs a frame.  This is
+  -- the engine's own call for the engine's own problem; the mod is only
+  -- admitting that it made one of the hitches.
+  --
+  -- Resolved lazily and once: a host without the module (a test harness, a
+  -- future engine that renamed it) simply gets a no-op, and the save is
+  -- unaffected either way.
+  local fixedStep, fixedStepTried = nil, false
+
+  local function absorbHitch()
+    if not fixedStepTried then
+      fixedStepTried = true
+      local ok, module = pcall(require, "src.core.FixedStep")
+      fixedStep = (ok and type(module) == "table"
+        and type(module.discardCatchup) == "function") and module or false
+    end
+    if not fixedStep then return end
+    pcall(function() fixedStep:discardCatchup() end)
+  end
+
   -- The second is the upload the write woke.
   --
   -- writeSave tells the sync engine it happened, which arms a five second
@@ -723,7 +766,13 @@ return function(mod)
         and self.pending
         and not quietFrame(state.game)
       if hold then return end
-      return update(self, dt)
+      -- A cycle's expensive half is the plan, and the plan runs on the frame
+      -- the reply lands on -- which is this one, if `pending` clears over the
+      -- call.  Same hitch, same remedy.
+      local hadReply = self.pending ~= nil
+      local result = update(self, dt)
+      if hadReply and self.pending == nil then absorbHitch() end
+      return result
     end
   end
 
@@ -792,6 +841,10 @@ return function(mod)
     state.saving = true
     local ok, result = pcall(game.writeSave, game)
     state.saving = false
+    -- Before anything else looks at the result: the frame is already long,
+    -- and what must not happen next is the engine paying that back as a burst
+    -- of logic steps over the fade this write is hiding under.
+    absorbHitch()
 
     if ok and result ~= false then
       state.elapsed = 0
