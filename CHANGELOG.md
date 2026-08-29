@@ -1,5 +1,96 @@
 # Changelog
 
+## 1.13.0
+
+**Everything the suite can change is now one row on the game's own OPTION
+screen**, nested in folder cards, and the other half of the suite's settings
+are on it too.
+
+Everything was reachable before this and almost none of it was findable. The
+bundle deliberately put no row on the OPTION screen -- the reasoning was that a
+mod's settings live under `MODS` -- so the run button was at
+`MODS > GEN1WILD QOL > OPTIONS > SPRINT`: three screens deep, behind a name
+that is a repository rather than a thing, and with a fifty-fifty guess about
+which half of the suite owned it. Installing both halves gave you two separate
+lists to guess between.
+
+### The door
+
+One row on the `OPTION` screen, next to `MODS`. It is named after the cart when
+a cart is running -- `WILD GREEN`, which is what was installed and what the
+launcher calls it -- and after this bundle when one half is installed on its
+own, where calling it `WILD GREEN` would be naming something that is not there.
+
+Both halves add that row under one shared id, so the first one there wins and
+the second finds it already present: one door, not two identical ones. The
+`MODS > GEN1WILD QOL > OPTIONS` route still lands on the same screens for
+anyone who learned it.
+
+### The cards
+
+Behind the door are folder cards -- which is how the game's own OPTION screen
+has nested since it grew `SPEED`, `VIDEO` and `AUDIO` pages. Each says how many
+of its rows are on.
+
+| Card | Rows |
+| --- | --- |
+| `OUT IN THE WORLD` | `SPRINT`, `EASY HM USE`, `AREA BANNER`, and Gen1WildUI's `ELEVATOR PANEL` |
+| `YOUR POKEMON` | `FOLLOWERS`, `REMEMBER MOVES`, `ALL 151`, and Gen1WildUI's `POKEDEX`, `POKEMON BOX`, `PARTY MENU` |
+| `BATTLES` | `EXP SHARE`, `CAUGHT MARKER`, and Gen1WildUI's `BACKDROPS`, `BATTLE INTRO`, `BATTLE MENUS` |
+| `ITEMS AND BAG` | Gen1WildUI's `BAG` and `ITEM INFO` |
+| `SAVING AND SOUND` | `AUTO SAVE`, `AUTO CONTINUE`, `SOUND` |
+| `MOD SETUP` | `MENU LAYOUT`, `MOD MANAGER` |
+| `OTHER MODS` | every other loaded mod that has settings |
+
+Four rows fit on a screen, which is the point of the exercise: thirteen
+features flat was four screenfuls of scrolling to reach one row, and six cards
+is one and a half with three or four rows behind each.
+
+### Both halves, one menu
+
+Gen1WildQOL and Gen1WildUI are one suite split in two for the index's sake, and
+that split was leaking into the menu. Each bundle now publishes a description
+of its own menu and draws the other's rows beside its own, delegating the
+switch to the bundle that owns it and opening that bundle's own settings screen
+on `A`. **Whichever half you open, you see the whole suite.**
+
+With one half installed the lookup finds nothing and the menu is that half's
+own, exactly as before. A sibling released before this exists is also a miss,
+so the two can be updated in either order.
+
+### The rest of what is installed
+
+The last card is every other mod that is loaded and has settings of its own --
+the rest of what a cart pins, plus anything installed by hand. Those rows are
+built from the schema the mod registered, and written back through the same
+tables and the same `mod.options_changed` event the mod manager uses, so a row
+set here and a row set there are the same row.
+
+### Three bundled mods came forward
+
+- **`AUTO SAVE` writes on a loading screen** (Gen1AutoSave 1.6.0). The write was
+  never the expensive part -- the collector catching up on what it threw away
+  is -- and what made it *felt* was where that frame landed: a stutter in the
+  middle of walking, the one place a dropped frame shows. A save that is due
+  now waits for a screen the game is already blacking out (a warp's fade, a
+  battle's return hold) and goes there, so the cost lands on a loading screen
+  you were already waiting through. After three quarters of a minute with no
+  warp and no battle it writes where it stands rather than not at all.
+
+- **`FOLLOWERS` are drawn at the size their art was drawn at** (Gen1Follower
+  1.5.0). The sheets are 16x16 and that is the whole detail budget; the scale
+  floor was `0.6875`, so every small species was resampled down to 11px and
+  lost five rows and five columns -- 67 of Bulbasaur's 138 opaque pixels. What
+  survived read as a flat two-colour blob rather than a small Bulbasaur. The
+  floor is `1.0` now and `POKEDEX SIZES` ships off, so nothing is drawn below
+  native size unless you ask for it.
+
+- **`SPRINT` stands down while a script is walking you** (Gen1Sprint 0.3.0).
+  Oak's walk to the lab pins his step length to yours once, at the start;
+  sprint made your step length depend on what you are holding, so Oak was left
+  stepping at a length you no longer had and hopped -- step, pause, step, pause
+  -- the whole way there.
+
 ## 1.12.0
 
 **The option screen is grouped the way somebody looking for a setting reads
