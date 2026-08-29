@@ -11,6 +11,9 @@
 --   entry        the upstream mod's own entry chunk, from its manifest
 --   label        the row in the menu
 --   description  shown on A when the feature has no settings of its own
+--   group        which folder card in `spec.groups` this feature's row sits
+--                on.  A feature naming no card, or one that is not declared,
+--                gets a plain row on the top level instead of being hidden.
 --   enabledKey   the upstream option row that already acts as a master
 --                switch.  Present means the switch is live -- the feature's
 --                own code reads it every time it acts, so OFF is the
@@ -49,6 +52,26 @@ return {
     -- landed in the other half of the split.  Gen151 wants Gen1Dex; Gen1Dex
     -- is in the UI bundle.
     paired_bundle = "gen1_wild_ui",
+
+    -- The folder cards the menu nests its rows under, in the order they are
+    -- drawn.  Both halves of the suite declare the same six, because either
+    -- half can end up hosting the merged menu and it should read the same way
+    -- round whichever one the player opened.  A card with nothing in it is not
+    -- drawn, so a half that has no features for a card simply does not show it.
+    groups = {
+      { id = "world",   label = "OUT IN THE WORLD",
+        description = "WALKING, RUNNING AND THE THINGS ON THE MAP." },
+      { id = "pokemon", label = "YOUR POKEMON",
+        description = "THE POKEMON THEMSELVES, AND THE SCREENS ABOUT THEM." },
+      { id = "battles", label = "BATTLES",
+        description = "WHAT A BATTLE LOOKS LIKE AND HOW IT PLAYS." },
+      { id = "items",   label = "ITEMS AND BAG",
+        description = "THE BAG, THE MART AND WHAT EVERY ITEM IS FOR." },
+      { id = "saving",  label = "SAVING AND SOUND",
+        description = "WHEN THE GAME SAVES ITSELF, AND WHAT IT SOUNDS LIKE." },
+      { id = "setup",   label = "MOD SETUP",
+        description = "THE MENUS AND THE MOD MANAGER THE REST IS REACHED THROUGH." },
+    },
   },
 
   features = {
@@ -60,6 +83,7 @@ return {
     -- than one of thirteen.
     {
       id = "sprint",
+      group = "world",
       install_seq = 1,
       priority = 100,
       dir = "Gen1Sprint",
@@ -72,6 +96,7 @@ return {
     },
     {
       id = "interact",
+      group = "world",
       install_seq = 13,
       maintained = true,
       priority = 100,
@@ -95,6 +120,7 @@ return {
     },
     {
       id = "banners",
+      group = "world",
       install_seq = 12,
       maintained = true,
       priority = 100,
@@ -119,6 +145,7 @@ return {
     -- of you can be taught.
     {
       id = "follower",
+      group = "pokemon",
       install_seq = 5,
       priority = 100,
       dir = "Gen1Follower",
@@ -130,6 +157,7 @@ return {
     },
     {
       id = "remember",
+      group = "pokemon",
       install_seq = 7,
       priority = 1200,
       dir = "Gen1Remember",
@@ -157,6 +185,7 @@ return {
     -- so it sits with the other battle rows near the top.
     {
       id = "expshare",
+      group = "battles",
       install_seq = 10,
       priority = 100,
       dir = "ExpShare",
@@ -171,6 +200,7 @@ return {
     },
     {
       id = "caught",
+      group = "battles",
       install_seq = 11,
       maintained = true,
       priority = 100,
@@ -201,6 +231,7 @@ return {
     -- so OFF here really is vanilla encounters.
     {
       id = "gen151",
+      group = "pokemon",
       install_seq = 6,
       priority = 900,
       dir = "Gen151",
@@ -215,6 +246,7 @@ return {
     -- ---- saving
     {
       id = "autosave",
+      group = "saving",
       install_seq = 2,
       priority = 50,
       dir = "Gen1AutoSave",
@@ -227,6 +259,7 @@ return {
     },
     {
       id = "autocontinue",
+      group = "saving",
       install_seq = 3,
       priority = 100,
       dir = "Gen1AutoContinue",
@@ -241,6 +274,7 @@ return {
     -- ---- sound
     {
       id = "sound",
+      group = "saving",
       install_seq = 4,
       priority = 100,
       dir = "Gen1SoundQOL",
@@ -270,6 +304,7 @@ return {
     -- they were.
     {
       id = "menus",
+      group = "setup",
       install_seq = 8,
       priority = 900,
       dir = "Gen1MenuManager",
@@ -286,6 +321,7 @@ return {
     },
     {
       id = "modmenu",
+      group = "setup",
       install_seq = 9,
       priority = 500,
       dir = "Gen1ModMenu",
