@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.12.0
+
+**The option screen is grouped the way somebody looking for a setting reads
+it**, and three bundled mods come forward with fixes.
+
+The thirteen rows were in the order the mods happened to be added. `SPRINT`
+was first, but `EASY HM USE` -- the other row about walking around -- was
+thirteenth; `EXP SHARE`, which decides how the whole party levels and is the
+row most likely to be changed before a new save is started, was tenth, *below*
+the mod manager. The furniture sat in the middle here and last in
+[Gen1WildUI](https://github.com/wild1walker/Gen1WildUI), so the two halves read
+differently from each other.
+
+They are grouped now, and the furniture is last in both halves:
+
+| | Rows |
+| --- | --- |
+| getting around | `SPRINT`, `EASY HM USE`, `AREA BANNER` |
+| your POKéMON | `FOLLOWERS`, `REMEMBER MOVES` |
+| battles | `EXP SHARE`, `CAUGHT MARKER` |
+| catching everything | `ALL 151` |
+| saving | `AUTO SAVE`, `AUTO CONTINUE` |
+| sound | `SOUND` |
+| the furniture | `MENU LAYOUT`, `MOD MANAGER` |
+
+**Nothing installs in a different order.** That is worth saying plainly,
+because it nearly did: declaration order was doing two jobs at once, both the
+menu's order and the tie-break for features sharing a load priority, so moving
+a row up the list would have silently reordered installation among eight
+features. Each feature now carries an `install_seq` fixing its load rank, and
+the two orders move independently. A test reads the shipped `features.lua` and
+asserts both, and fails if a future reorder drops a rank.
+
+### The mods inside it
+
+- **`AUTO SAVE` to 1.5.0** — a sync cycle no longer lands its stall in the
+  frames you are mid-step in. The expensive part of a sync is built against the
+  server's *reply*, so it arrived on network time with no relation to anything
+  you did, which is why it read as the game hiccupping. New `QUIET SYNC` row.
+- **`ALL 151` to 1.5.2** — `TEST BENCH` is a developer row now rather than one
+  sitting in a shipped cart's options inviting a player to find out what it
+  does.
+- **`FOLLOWERS` to 1.3.3** — a dead option read removed. No behaviour change.
+
 ## 1.11.1
 
 **The Pokémon standing on the maps stop flipping on the spot**, following

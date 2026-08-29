@@ -407,16 +407,28 @@ return function(mod)
   -- ----------------------------------------------------------------------
   -- 4. Register / patch the SPRITE_PIKACHU sprite definition
   -- ----------------------------------------------------------------------
-  local function colorMode()
-    return not (mod.options and mod.options:get("color_mode") == "gbc")
-  end
+  -- The sheets are full-colour art, always: 251 PNGs carrying real RGB rather
+  -- than four-shade pics for the zone pass to colorize.  So every def this mod
+  -- writes is a trueColor one, and the draw path already agrees -- an unscaled
+  -- follower is replayed after the zone pass (PaletteFX.markSpriteRedraw)
+  -- whatever the def says.
+  --
+  -- This used to ask an option called `color_mode` whether the answer was
+  -- "gbc", which would have sent the art through the shade remap instead.
+  -- Nothing has ever defined that key: not this mod, which never listed it in
+  -- options:define, and not the engine, which has no such row anywhere.  The
+  -- mod option API answers nil for a key it has no schema for, so the
+  -- comparison was false on every boot the mod has ever had, and the branch
+  -- was dead the day it was written.  Spelled as the constant it always
+  -- evaluated to, so nobody reads it as a setting that went missing.
+  local TRUE_COLOR_ART = true
 
   local followerSpriteDef = {
     id = SPRITE_ID,
     image = assetPath(FALLBACK_SPECIES),
     frames = 6,
     walker = true,
-    trueColor = colorMode(),
+    trueColor = TRUE_COLOR_ART,
     spriteType = isGen2 and "WALKING_SPRITE" or nil,
   }
 
@@ -550,7 +562,7 @@ return function(mod)
           image = assetPath(species),
           frames = 6,
           walker = true,
-          trueColor = colorMode(),
+          trueColor = TRUE_COLOR_ART,
           -- Read by the voxel billboard hook further down, so a map POKeMON
           -- is Pokedex-scaled in 3D exactly as it is in 2D.
           pokepcFollowerSpecies = species,
@@ -592,7 +604,7 @@ return function(mod)
     local sprites = spritesFor(game)
     if type(sprites) ~= "table" then return end
     local enabled = overworldMonsEnabled()
-    local trueColor = colorMode()
+    local trueColor = TRUE_COLOR_ART
     if isGen2 then
       for id, def in pairs(sprites) do
         if type(def) == "table" and def.spriteType == "POKEMON_SPRITE"
@@ -741,7 +753,7 @@ return function(mod)
     def.image = assetPath(species)
     def.frames = 6
     def.walker = true
-    def.trueColor = colorMode()
+    def.trueColor = TRUE_COLOR_ART
     def.pokepcFollowerSpecies = species
     def.pokepcFollowerVisualScale = followerVisualScale(species)
     return def, species
@@ -771,7 +783,7 @@ return function(mod)
       npc.sprite.def.image = assetPath(species)
       npc.sprite.def.frames = 6
       npc.sprite.def.walker = true
-      npc.sprite.def.trueColor = colorMode()
+      npc.sprite.def.trueColor = TRUE_COLOR_ART
       npc.sprite.def.pokepcFollowerSpecies = species
       npc.sprite.def.pokepcFollowerVisualScale = newScale
     end
@@ -1287,7 +1299,7 @@ return function(mod)
   end
 
   partyMenuState.afterDraw = function(self)
-    if colorMode() and not externalPartyIconOwner() then
+    if not externalPartyIconOwner() then
       local party = (self.game and self.game.save and self.game.save.party) or {}
       for i = 1, #party do
         PaletteFX.markTrueColor(0, (i - 1) * 16, 32, 16)

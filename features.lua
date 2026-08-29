@@ -52,10 +52,15 @@ return {
   },
 
   features = {
-    -- ---- movement and pacing
-
+    -- ---- getting around
+    --
+    -- The first thing anybody does in this game is walk, so the rows about
+    -- walking come first.  A player opening this screen for the first time is
+    -- usually looking for the run button, and it is now the first row rather
+    -- than one of thirteen.
     {
       id = "sprint",
+      install_seq = 1,
       priority = 100,
       dir = "Gen1Sprint",
       entry = "main.lua",
@@ -65,53 +70,56 @@ return {
       default = true,
       aliases = { "Gen1Sprint", "gen1_sprint" },
     },
-
-    -- ---- saving
-
     {
-      id = "autosave",
-      priority = 50,
-      dir = "Gen1AutoSave",
-      entry = "main.lua",
-      label = "AUTO SAVE",
-      description = "SAVES ON A TIMER AND AFTER BATTLES, CATCHES AND NEW AREAS, WITH OPTIONAL ROLLBACK BACKUPS.",
-      enabledKey = "enabled",
-      default = true,
-      aliases = { "Gen1AutoSave", "gen1autosave" },
-    },
-
-    {
-      id = "autocontinue",
+      id = "interact",
+      install_seq = 13,
+      maintained = true,
       priority = 100,
-      dir = "Gen1AutoContinue",
-      entry = "main.lua",
-      label = "AUTO CONTINUE",
-      description = "BOOT TO TITLE, ONE PRESS, PLAYING. SKIPS THE INTRO AND THE CONTINUE MENU.",
-      enabledKey = "enabled",
+      dir = "QualityOfLife",
+      entry = "bundle_easy_interactions.lua",
+      label = "EASY HM USE",
+      description = "PRESS A AT BUSHES, BOULDERS AND WATER TO USE CUT, STRENGTH, SURF OR A ROD WITHOUT THE MENU.",
+      -- The master is the feature's own row, not a switch of the bundle's.
+      -- It used to be the latter, and that was a bug: the synthesized switch
+      -- only decided whether to INSTALL, while this row decides whether the
+      -- feature does anything -- so turning the feature on installed
+      -- something still set to OFF, and the row that actually mattered was
+      -- buried one screen down saying the opposite. Donating the row makes
+      -- the two one switch, and a live one: the feature reads it every time
+      -- it acts, so there is nothing to relaunch.
+      -- Its sub-rows are unchanged: WATER INTERACTION ships FISH FIRST,
+      -- REPEL PROMPT ships on, CUT GRASS inherits this row until set.
+      enabledKey = "qol_easy_interactions",
       default = true,
-      aliases = { "Gen1AutoContinue", "gen1_auto_continue" },
+      aliases = { "qol_easy_interactions" },
     },
-
-    -- ---- sound
-
     {
-      id = "sound",
+      id = "banners",
+      install_seq = 12,
+      maintained = true,
       priority = 100,
-      dir = "Gen1SoundQOL",
-      entry = "main.lua",
-      label = "SOUND",
-      description = "THE LOW-HP SIREN BEEPS ONCE INSTEAD OF LOOPING, AND MOBILE MUTES WHEN ANOTHER APP TAKES THE AUDIO.",
-      -- Gen1SoundQOL has no master row of its own: its rows are ALARM MODE,
-      -- ALARM CYCLES and ALARM RETRIGGER, none of which is an off switch for
-      -- the whole mod.  So the bundle synthesizes one.
-      default = true,
-      aliases = { "Gen1SoundQOL", "gen1_sound_qol" },
+      dir = "QualityOfLife",
+      entry = "bundle_location_banners.lua",
+      label = "AREA BANNER",
+      description = "NAMES THE AREA YOU HAVE JUST WALKED INTO, ON A SIGN SIZED TO THE NAME.",
+      -- The master here is the duration row rather than a synthesized toggle:
+      -- OFF is already one of its values, so the switch is live and the menu
+      -- row can say how long the sign stays up instead of merely ON.
+      enabledKey = "qol_location_banners",
+      -- The master here is the duration, so its default is a number of
+      -- seconds rather than a boolean.
+      default = 3,
+      aliases = { "qol_location_banners" },
     },
 
-    -- ---- followers
-
+    -- ---- your POKeMON
+    --
+    -- The two rows about the POKeMON themselves rather than about the game
+    -- around them: the one walking behind you, and the moves the one in front
+    -- of you can be taught.
     {
       id = "follower",
+      install_seq = 5,
       priority = 100,
       dir = "Gen1Follower",
       entry = "main_sandbox.lua",
@@ -120,28 +128,9 @@ return {
       default = true,
       aliases = { "Gen1Follower", "PokePCFollowers", "followers" },
     },
-
-    -- ---- catching everything
-    --
-    -- Not a visual change and not strictly a convenience either, but it is the
-    -- one mod in the index that is neither, and it belongs with the half a
-    -- player turns on to make a single save complete.  Its own switch is live,
-    -- so OFF here really is vanilla encounters.
-
-    {
-      id = "gen151",
-      priority = 900,
-      dir = "Gen151",
-      entry = "main.lua",
-      label = "ALL 151",
-      description = "EVERY ONE OF THE 151 OBTAINABLE IN ONE SAVE, ON ONE VERSION, WITHOUT TRADING.",
-      enabledKey = "enabled",
-      default = true,
-      aliases = { "Gen151", "gen151" },
-    },
-
     {
       id = "remember",
+      install_seq = 7,
       priority = 1200,
       dir = "Gen1Remember",
       entry = "main.lua",
@@ -160,67 +149,15 @@ return {
       aliases = { "Gen1Remember" },
     },
 
-    -- ---- the furniture
+    -- ---- battles
     --
-    -- These two are in Gen1WildUI as well, and deliberately.  They are not
-    -- really visual overhauls or conveniences: they are how every other
-    -- feature is reached.  A player who installs only this half should not
-    -- lose the mod manager redraw, and one who installs only the other half
-    -- should not lose it either -- so both carry them, and runtime/claims.lua
-    -- makes sure only one of them ever installs one.
-    --
-    -- Their settings are stored under `gen1_wild_shared` rather than under
-    -- either bundle, so which one won is invisible to the player: install the
-    -- other half later, and the row order and manager layout are still what
-    -- they were.
-
-    {
-      id = "menus",
-      priority = 900,
-      dir = "Gen1MenuManager",
-      entry = "main.lua",
-      label = "MENU LAYOUT",
-      description = "REORDER THE START AND PC MENUS, HIDE ROWS YOU NEVER TOUCH, AND PIN FIELD MOVES TO ROWS OF THEIR OWN.",
-      default = true,
-      aliases = { "Gen1MenuManager" },
-      shared = {
-        claim = "gen1wild_menu_manager",
-        storage = "gen1_wild_shared",
-        owner = "gen1_wild_ui",
-      },
-    },
-
-    {
-      id = "modmenu",
-      priority = 500,
-      dir = "Gen1ModMenu",
-      entry = "main.lua",
-      label = "MOD MANAGER",
-      description = "THE MOD MANAGER REDRAWN IN THE GAME'S OWN OPTION-SCREEN IDIOM, WITH SORTING AND FILTERS.",
-      default = true,
-      aliases = { "Gen1ModMenu", "gen1_mod_menu" },
-      -- Set from this mod's own in-game quick menu, which goes through the
-      -- engine manager's setOption and writes them unprefixed.
-      raw_option_keys = { "sort", "hide_disabled", "only_options" },
-      shared = {
-        claim = "gen1wild_mod_menu",
-        storage = "gen1_wild_shared",
-        owner = "gen1_wild_ui",
-      },
-    },
-
-    -- ---- experience sharing
-    --
-    -- Originally ShaneMcGovernIE's exp_share, maintained here now rather than
-    -- tracked: the source is under maintained/ExpShare and edits go straight
-    -- in.  It keeps its mode on the engine's own OPTION screen and in the
-    -- save rather than in mod options, so the bundle does not try to move its
-    -- storage -- it seeds the default and mirrors the rows into the bundle
-    -- menu, and suppresses the original row so the setting has one home
-    -- rather than two.
-
+    -- EXP SHARE was the tenth row, below the mod manager, which is a strange
+    -- place for the setting that decides how the whole party levels.  It is
+    -- the one row here most likely to be changed before a new save is started,
+    -- so it sits with the other battle rows near the top.
     {
       id = "expshare",
+      install_seq = 10,
       priority = 100,
       dir = "ExpShare",
       entry = "main.lua",
@@ -232,34 +169,9 @@ return {
       adapter = "expshare",
       suppress_hooks = { ["ui.options.rows"] = true },
     },
-
-    -- ---- later-generation conveniences
-    --
-    -- Originally unxpected-uxp's Quality of Life mod, maintained here now
-    -- rather than tracked: the source is under maintained/QualityOfLife and
-    -- edits go straight in.  It shipped these four as one mod behind one
-    -- submenu; here each is its own row, because they are unrelated to each
-    -- other and a player who wants easy HM use has no particular reason to
-    -- want an XP bar.
-
-    -- The XP bar used to be here, as a fifth row.  It is Gen1BattleUI's now
-    -- (Gen1WildUI), because it is a battle UI feature and that is the battle
-    -- UI mod -- and because of a bug that had no fix on this side of it.
-    -- Drawn from here it went down in a wrapper around battle.draw, which
-    -- runs after every link on battle.overlay whatever priority they carry,
-    -- so it could not be drawn over.  It clipped itself to x=88 instead --
-    -- where the VANILLA move panel ends -- and Gen1BattleUI's panel ends at
-    -- 112, so twenty-four pixels of blue line lay across its PP row every
-    -- time a move menu was up.  Over there the bar and the panel are drawn by
-    -- one function, bar first, and the panel covers it because it is drawn
-    -- after it.  Nothing to clip and nothing to keep in step.
-    --
-    -- `qol_exp_bar` is deliberately NOT reused for anything else here: a key
-    -- that means something new to a save that already has it set is worse
-    -- than a key that is gone.
-
     {
       id = "caught",
+      install_seq = 11,
       maintained = true,
       priority = 100,
       dir = "QualityOfLife",
@@ -281,45 +193,115 @@ return {
       aliases = { "qol_caught_indicator" },
     },
 
+    -- ---- catching everything
+    --
+    -- Not a visual change and not strictly a convenience either, but it is the
+    -- one mod in the index that is neither, and it belongs with the half a
+    -- player turns on to make a single save complete.  Its own switch is live,
+    -- so OFF here really is vanilla encounters.
     {
-      id = "banners",
-      maintained = true,
-      priority = 100,
-      dir = "QualityOfLife",
-      entry = "bundle_location_banners.lua",
-      label = "AREA BANNER",
-      description = "NAMES THE AREA YOU HAVE JUST WALKED INTO, ON A SIGN SIZED TO THE NAME.",
-      -- The master here is the duration row rather than a synthesized toggle:
-      -- OFF is already one of its values, so the switch is live and the menu
-      -- row can say how long the sign stays up instead of merely ON.
-      enabledKey = "qol_location_banners",
-      -- The master here is the duration, so its default is a number of
-      -- seconds rather than a boolean.
-      default = 3,
-      aliases = { "qol_location_banners" },
+      id = "gen151",
+      install_seq = 6,
+      priority = 900,
+      dir = "Gen151",
+      entry = "main.lua",
+      label = "ALL 151",
+      description = "EVERY ONE OF THE 151 OBTAINABLE IN ONE SAVE, ON ONE VERSION, WITHOUT TRADING.",
+      enabledKey = "enabled",
+      default = true,
+      aliases = { "Gen151", "gen151" },
     },
 
+    -- ---- saving
     {
-      id = "interact",
-      maintained = true,
-      priority = 100,
-      dir = "QualityOfLife",
-      entry = "bundle_easy_interactions.lua",
-      label = "EASY HM USE",
-      description = "PRESS A AT BUSHES, BOULDERS AND WATER TO USE CUT, STRENGTH, SURF OR A ROD WITHOUT THE MENU.",
-      -- The master is the feature's own row, not a switch of the bundle's.
-      -- It used to be the latter, and that was a bug: the synthesized switch
-      -- only decided whether to INSTALL, while this row decides whether the
-      -- feature does anything -- so turning the feature on installed
-      -- something still set to OFF, and the row that actually mattered was
-      -- buried one screen down saying the opposite. Donating the row makes
-      -- the two one switch, and a live one: the feature reads it every time
-      -- it acts, so there is nothing to relaunch.
-      -- Its sub-rows are unchanged: WATER INTERACTION ships FISH FIRST,
-      -- REPEL PROMPT ships on, CUT GRASS inherits this row until set.
-      enabledKey = "qol_easy_interactions",
+      id = "autosave",
+      install_seq = 2,
+      priority = 50,
+      dir = "Gen1AutoSave",
+      entry = "main.lua",
+      label = "AUTO SAVE",
+      description = "SAVES ON A TIMER AND AFTER BATTLES, CATCHES AND NEW AREAS, WITH OPTIONAL ROLLBACK BACKUPS.",
+      enabledKey = "enabled",
       default = true,
-      aliases = { "qol_easy_interactions" },
+      aliases = { "Gen1AutoSave", "gen1autosave" },
+    },
+    {
+      id = "autocontinue",
+      install_seq = 3,
+      priority = 100,
+      dir = "Gen1AutoContinue",
+      entry = "main.lua",
+      label = "AUTO CONTINUE",
+      description = "BOOT TO TITLE, ONE PRESS, PLAYING. SKIPS THE INTRO AND THE CONTINUE MENU.",
+      enabledKey = "enabled",
+      default = true,
+      aliases = { "Gen1AutoContinue", "gen1_auto_continue" },
+    },
+
+    -- ---- sound
+    {
+      id = "sound",
+      install_seq = 4,
+      priority = 100,
+      dir = "Gen1SoundQOL",
+      entry = "main.lua",
+      label = "SOUND",
+      description = "THE LOW-HP SIREN BEEPS ONCE INSTEAD OF LOOPING, AND MOBILE MUTES WHEN ANOTHER APP TAKES THE AUDIO.",
+      -- Gen1SoundQOL has no master row of its own: its rows are ALARM MODE,
+      -- ALARM CYCLES and ALARM RETRIGGER, none of which is an off switch for
+      -- the whole mod.  So the bundle synthesizes one.
+      default = true,
+      aliases = { "Gen1SoundQOL", "gen1_sound_qol" },
+    },
+
+    -- ---- the furniture
+    --
+    -- Last, and last in Gen1WildUI too, so the two halves read the same way
+    -- round.  These two are in both bundles deliberately: they are not really
+    -- conveniences or visual overhauls, they are how every other feature is
+    -- reached.  A player who installs only this half should not lose the mod
+    -- manager redraw, and one who installs only the other half should not lose
+    -- it either -- so both carry them, and runtime/claims.lua makes sure only
+    -- one of them ever installs one.
+    --
+    -- Their settings are stored under `gen1_wild_shared` rather than under
+    -- either bundle, so which one won is invisible to the player: install the
+    -- other half later, and the row order and manager layout are still what
+    -- they were.
+    {
+      id = "menus",
+      install_seq = 8,
+      priority = 900,
+      dir = "Gen1MenuManager",
+      entry = "main.lua",
+      label = "MENU LAYOUT",
+      description = "REORDER THE START AND PC MENUS, HIDE ROWS YOU NEVER TOUCH, AND PIN FIELD MOVES TO ROWS OF THEIR OWN.",
+      default = true,
+      aliases = { "Gen1MenuManager" },
+      shared = {
+        claim = "gen1wild_menu_manager",
+        storage = "gen1_wild_shared",
+        owner = "gen1_wild_ui",
+      },
+    },
+    {
+      id = "modmenu",
+      install_seq = 9,
+      priority = 500,
+      dir = "Gen1ModMenu",
+      entry = "main.lua",
+      label = "MOD MANAGER",
+      description = "THE MOD MANAGER REDRAWN IN THE GAME'S OWN OPTION-SCREEN IDIOM, WITH SORTING AND FILTERS.",
+      default = true,
+      aliases = { "Gen1ModMenu", "gen1_mod_menu" },
+      -- Set from this mod's own in-game quick menu, which goes through the
+      -- engine manager's setOption and writes them unprefixed.
+      raw_option_keys = { "sort", "hide_disabled", "only_options" },
+      shared = {
+        claim = "gen1wild_mod_menu",
+        storage = "gen1_wild_shared",
+        owner = "gen1_wild_ui",
+      },
     },
   },
 }
