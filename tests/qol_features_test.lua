@@ -240,6 +240,44 @@ do
   openMenu()
   eq(#logged, before, "once, not on every press")
 
+  -- ---- the catalog: what this menu CAN show, not what it is showing
+  --
+  -- The live list is the answer to "what is usable on this tile".  Anything
+  -- that wants to ARRANGE the menu needs the other question answered too, and
+  -- it has no other source: a row that only appears outdoors, with FLY in the
+  -- party, is invisible to an editor until the player is standing there.
+  local catalog = mod.exports.fieldMenu.catalog
+  ok(type(catalog) == "function", "the registry publishes a catalog")
+
+  local ids = {}
+  for _, entry in ipairs(catalog() or {}) do ids[#ids + 1] = tostring(entry.id) end
+  eq(table.concat(ids, ","), "fly,teleport,flash,dig,map,repel,cancel",
+    "listing every row this menu can ever show, whatever is usable right now")
+
+  -- the repel row reads SUPER REPEL or MAX REPEL depending on the bag, which
+  -- is exactly why the catalog names it plainly and both are keyed by id
+  local labels = {}
+  for _, entry in ipairs(catalog() or {}) do
+    labels[#labels + 1] = tostring(entry.label)
+  end
+  ok(labels[6] == "REPEL", "and names the repel row plainly, not by the bag")
+
+  -- a provider declares its own rows alongside its handler
+  local dropMine = mod.exports.fieldMenu.provide(function(_, _, rows)
+    return rows
+  end, "someone", { { id = "mine", label = "MINE" } })
+  local withMine = {}
+  for _, entry in ipairs(catalog() or {}) do
+    withMine[#withMine + 1] = tostring(entry.id)
+  end
+  eq(withMine[#withMine], "mine", "a provider's declared rows join the catalog")
+  dropMine()
+  local without = {}
+  for _, entry in ipairs(catalog() or {}) do
+    without[#without + 1] = tostring(entry.id)
+  end
+  eq(#without, #ids, "and leave it when the provider does")
+
   for name, value in pairs(realLoaded) do package.loaded[name] = value end
   if handlers then handlers[mod.id] = nil end
 end

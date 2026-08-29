@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.21.1
+
+### Fixed
+
+- **The layout editor drew a hint over its own frame.** 1.21.0 put the
+  `< >:MENU` hint on the row below the existing one — which is the box's bottom
+  border, not an interior row — so it came out as a smear across the frame.
+  There is one line for hints and it was already full. The arrows are on the
+  title now (`< START MENU >`), where there is room and where the thing they
+  move is already named. (Gen1MenuManager 0.3.1.)
+
+- **The `SELECT` menu's editor listed only rows it had already seen.** That
+  menu's rows appear only where they are usable — `FLY` outdoors, `FLASH` in
+  the dark, a repel while one is in the bag — so arranging `FLY` would have
+  meant standing outdoors, with `FLY` in the party, holding the editor open.
+  A menu whose editor shows one row is not an editor.
+
+  `EASY HM USE` now publishes a catalog of every row that menu can *ever* show
+  — `FLY`, `TELEPORT`, `FLASH`, `DIG`, `MAP`, a repel, `CANCEL`, plus whatever
+  another mod declares — and the editor lists the ones that are not on screen
+  right now anyway, so they can be ordered and switched off in advance, the way
+  a pinned row is. A provider declares its own rows alongside its handler:
+
+  ```lua
+  qol.exports.fieldMenu.provide(fn, mod.id, { { id = "mine", label = "MINE" } })
+  ```
+
 ## 1.21.0
 
 **The `SELECT` field menu is arrangeable** (Gen1MenuManager 0.3.0).

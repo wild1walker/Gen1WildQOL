@@ -122,6 +122,14 @@ raises is skipped and said so once: a menu that fails to open because somebody
 else's row threw is a worse bug than a missing row. Gating is the provider's
 own business — this only promises that what *it* put there is usable here.
 
+A provider can declare the rows it contributes as a third argument —
+`provide(fn, mod.id, { { id = "mine", label = "MINE" } })` — and
+`exports.fieldMenu.catalog()` returns every row this menu can *ever* show,
+declared rows included. That is what lets a row be arranged before it has ever
+been on screen: this menu shows `FLY` only outdoors and `FLASH` only in the
+dark, so an editor that knew only what it had seen could arrange almost none of
+it.
+
 `MAP ON SELECT` is the first row built on that: the town map, outdoors, off by
 default.
 
