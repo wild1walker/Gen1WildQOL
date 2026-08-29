@@ -34,6 +34,7 @@ return function(mod)
   local GC_STEP = 4096      -- collector work per step, in KB of allocation
   local GC_STEPS = 12       -- ceiling: a cycle on a game-sized heap, no more
   local UPLOAD_GAP = 300    -- least time between two autosave-woken uploads
+  local SYNC_HOLD_MAX = 3   -- longest a mid-step frame may hold a sync cycle
 
   local BOX_W, BOX_H = 20, 3
   local ICON_W, ICON_H = 7, 3
@@ -67,6 +68,7 @@ return function(mod)
     syncWaitUntil = 0,
     lastUploadAt = -math.huge,
     syncWasBusy = false,
+    syncHeld = 0,
     notify = 0,
     heldTold = false,
     heldSince = nil,
@@ -125,6 +127,14 @@ return function(mod)
       label = "HEAL CONFLICTS",
       default = true,
       help = "Answer a sync conflict with your own older upload on both sides.",
+      visible_if = { key = "enabled", equals = true },
+    },
+    {
+      key = "quiet_sync",
+      type = "toggle",
+      label = "QUIET SYNC",
+      default = true,
+      help = "Hold a sync cycle out of the frames you are mid-step in.",
       visible_if = { key = "enabled", equals = true },
     },
     {
@@ -491,6 +501,69 @@ return function(mod)
     if not state.syncWasBusy then return end
     state.syncWasBusy = false
     settleGarbage()
+  end
+
+  -- And where the last of it lands.
+  --
+  -- Pacing chose how OFTEN a cycle runs.  It could not choose WHEN the
+  -- expensive part of one happens, and that is the half the player actually
+  -- feels.  The plan is built against the server's REPLY, not against the
+  -- request: SyncEngine:update polls the handle, and the frame the answer
+  -- lands on runs _planFrom, which is the decode of every slot.  So the stall
+  -- arrives on network time -- a moment set by latency and the server, with no
+  -- relation to anything the player did.  That is exactly why it reads as the
+  -- game hiccupping rather than as the game syncing: nothing on screen caused
+  -- it, and nothing on screen explains it.  The engine's own five minute sweep
+  -- lands the same way, and pacing never touched that one at all.
+  --
+  -- The work cannot be made cheap from here.  It can be made to land where it
+  -- does not show.  A frame dropped while the player is standing still, in a
+  -- menu, reading a box or in a battle is a frame nobody sees.  The same frame
+  -- dropped mid-step is a visible stutter, because the walk cycle and the
+  -- camera are both part-way between tiles and both jump when one frame is
+  -- worth two.
+  --
+  -- So a sync cycle with a reply in hand is not ticked while the player is
+  -- mid-step.  The engine's clock stops with it, so nothing fires early
+  -- afterwards to make the time back, and the first frame the player is not
+  -- mid-step it runs -- which is a fraction of a second later, because a step
+  -- IS a fraction of a second.  Any menu, text box, battle, doorway or pause
+  -- releases it immediately: all of them take the overworld off the top of the
+  -- stack, and none of them is a frame a dropped frame shows in.
+  --
+  -- Only when a reply is actually in flight.  A tick with nothing pending is
+  -- the cheap one that STARTS a cycle, and holding that would stop the clock
+  -- for no reason.  And held for at most SYNC_HOLD_MAX, so a player holding a
+  -- direction across Route 21 cannot starve sync -- after that it runs
+  -- wherever it lands, the way it always did.
+  local function midStride(game)
+    local ow = game and game.overworld
+    if not (ow and ow.player) then return false end
+    if game.stack and game.stack.top and game.stack:top() ~= ow then
+      return false
+    end
+    return ow.player.moving and true or false
+  end
+
+  local function holdSyncWhileWalking(game)
+    local engine = syncEngineOf(game)
+    if not engine or engine.gen1autosaveHeld then return end
+    local update = engine.update
+    if type(update) ~= "function" then return end
+    engine.gen1autosaveHeld = true
+    engine.update = function(self, dt)
+      local hold = on()
+        and mod.options:get("quiet_sync") ~= false
+        and self.pending
+        and state.syncHeld < SYNC_HOLD_MAX
+        and midStride(state.game)
+      if hold then
+        state.syncHeld = state.syncHeld + (tonumber(dt) or 0)
+        return
+      end
+      state.syncHeld = 0
+      return update(self, dt)
+    end
   end
 
   -- ---------- the write
@@ -1244,6 +1317,11 @@ return function(mod)
     end
 
     if not on() then return end
+
+    -- Installed on the engine instance the first frame there is one to install
+    -- it on: sync is built lazily and a mod loaded before it would find
+    -- nothing.  Idempotent, so this is a table lookup on every frame after.
+    holdSyncWhileWalking(game)
 
     -- A sync cycle that just finished left a heap full of decoded save slots
     -- behind it; pay for that here rather than on the route after it.

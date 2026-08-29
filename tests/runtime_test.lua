@@ -570,6 +570,66 @@ do
   eq(declared[1].id, "dex", "the menu still lists features as declared")
 end
 
+-- --------------------------------------- the real features.lua, both orders
+--
+-- The block above reproduces the sort from a fixture, so it pins the RULE but
+-- would not notice this bundle's own list moving.  This one reads the shipped
+-- features.lua and asserts both orders off it.
+--
+-- They are two different orders now.  Declaration order used to do both jobs,
+-- so moving a row up the menu silently reordered installation among every
+-- feature sharing its priority; `install_seq` fixes each feature's rank so the
+-- menu can be regrouped without touching what installs when.  If a future edit
+-- reorders the list and forgets to carry install_seq with it, the first
+-- assertion here fails.
+
+do
+  io.write("the shipped feature list installs and lists in the right orders\n")
+
+  local spec = load_("features.lua")
+  local features = spec.features
+
+  local order = {}
+  for index, feature in ipairs(features) do
+    order[#order + 1] = { feature = feature, index = index }
+  end
+  table.sort(order, function(a, b)
+    local pa = a.feature.priority or 100
+    local pb = b.feature.priority or 100
+    if pa ~= pb then return pa < pb end
+    local sa = a.feature.install_seq or a.index
+    local sb = b.feature.install_seq or b.index
+    if sa ~= sb then return sa < sb end
+    return a.index < b.index
+  end)
+
+  local installed = {}
+  for i, entry in ipairs(order) do installed[i] = entry.feature.id end
+  eq(table.concat(installed, ","),
+     "autosave,sprint,autocontinue,sound,follower,expshare,caught,banners,"
+       .. "interact,modmenu,gen151,menus,remember",
+     "installation is the order these mods were built and tested against")
+
+  local listed = {}
+  for i, feature in ipairs(features) do listed[i] = feature.id end
+  eq(table.concat(listed, ","),
+     "sprint,interact,banners,follower,remember,expshare,caught,gen151,"
+       .. "autosave,autocontinue,sound,menus,modmenu",
+     "the menu is grouped by what a player came looking for")
+
+  -- every feature carries a rank, or the decoupling has a hole in it
+  local missing = {}
+  for _, feature in ipairs(features) do
+    if feature.install_seq == nil then missing[#missing + 1] = feature.id end
+  end
+  eq(table.concat(missing, ","), "",
+     "every feature carries an install_seq")
+
+  -- and the furniture is last, the way Gen1WildUI's is
+  eq(listed[#listed], "modmenu", "the mod manager is the last row")
+  eq(listed[#listed - 1], "menus", "under the menu layout")
+end
+
 -- ------------------------------------------------------ end-to-end install
 
 do

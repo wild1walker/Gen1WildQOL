@@ -85,7 +85,32 @@ local function romText(data, label, fallback, ...)
 end
 
 return function(mod)
-  local options = mod.options:define{
+  -- The test bench is a maintenance tool, not a setting.  Turning it on grows
+  -- a BENCH row in the START menu that forces this mod's spawns, hands over a
+  -- kit and plays the cable sounds on demand -- which is the whole point of it
+  -- and no part of playing the game.  A row that says TEST BENCH and nothing
+  -- else, sitting in a shipped cart's options between RARITY % and
+  -- LEGENDARIES, is an invitation to find out what it does.
+  --
+  -- So it is offered only in developer mode -- POKEPORT_DEV=1, or --developer,
+  -- which conf.lua stashes in this global before any mod loads.  The person
+  -- the bench is for is already running the game that way.
+  --
+  -- The read is gated on the same flag, not just the row: a player who turned
+  -- it on once and then took an update would otherwise keep a BENCH row in
+  -- their START menu with nothing left in the options to remove it with.
+  --
+  -- mod.developer is the engine's own answer and the only one available here.
+  -- A mod runs in a sandbox whose `_G` is its own table (src/mods/Sandbox.lua
+  -- sets env._G = env) and whose `os` is four clock functions, so neither the
+  -- POKEPORT_DEV_MODE global nor os.getenv can be reached from inside one.
+  -- The loader resolves both once at construction and copies the verdict onto
+  -- the handle as plain data, for exactly this -- its own comment says a
+  -- sandboxed entry chunk can use it to decide whether to register
+  -- developer-only diagnostics.
+  local DEV = mod.developer == true
+
+  local optionRows = {
     { key = "enabled", type = "toggle", label = "GEN151", default = true },
 
     -- SPEC 7: every independent decision gets its own row.  The single
@@ -125,15 +150,6 @@ return function(mod)
       min = 0, max = 500, step = 25,
       visible_if = { key = "enabled", equals = true } },
 
-    -- The test bench.  Off is the shipping state and off is what a player
-    -- gets; on, the START menu grows a BENCH row that forces this mod's
-    -- spawns, hands over the kit and plays the cable sounds on demand.  It
-    -- lives here rather than in a companion mod because a bench you have to
-    -- download and import separately is a bench that is not there when you
-    -- want it.
-    { key = "bench", type = "toggle", label = "TEST BENCH", default = false,
-      visible_if = { key = "enabled", equals = true } },
-
     -- The one place "every species has a route" did not hold: a legendary's
     -- route can be permanently destroyed by pressing the wrong button, and
     -- the countermeasure players use -- save in front of it, reset on a bad
@@ -153,6 +169,16 @@ return function(mod)
     { key = "hints", type = "toggle", label = "AREA HINTS", default = true,
       visible_if = { key = "enabled", equals = true } },
   }
+
+  -- Last rather than back where it used to sit: a row for whoever is working
+  -- on the mod belongs after the rows for whoever is playing it.
+  if DEV then
+    optionRows[#optionRows + 1] =
+      { key = "bench", type = "toggle", label = "TEST BENCH", default = false,
+        visible_if = { key = "enabled", equals = true } }
+  end
+
+  local options = mod.options:define(optionRows)
 
   -- The loader hands a STORED option back verbatim; it does not check it
   -- against the schema the mod defines today (src/mods/Loader.lua, the
@@ -359,7 +385,7 @@ return function(mod)
   -- Last, so the bench's high-priority wrap on encounter.roll goes on above a
   -- chain that is already complete, and so a fault in it cannot cost a player
   -- the spawn layer.
-  if opt("bench") == true then
+  if DEV and opt("bench") == true then
     local bench = submodule(mod, "bench.lua")
     if bench then
       bench.install(mod, {
