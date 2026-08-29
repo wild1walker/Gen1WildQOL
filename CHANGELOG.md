@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.16.1
+
+**The warp's black screen is no longer cut short** (Gen1AutoSave 1.13.0). A
+save landing under it made you pop into the new map instead of fading in.
+
+That is not the save being slow — it is what the engine does with the frame
+afterwards. Logic advances in whole 1/60 steps out of an accumulator, so a
+frame that took 60 ms hands the next update a `dt` of 60 ms and the accumulator
+pays it back as four logic steps in a row before anything is drawn again. Four
+steps of a fade in one frame is not a fade, it is a cut.
+
+The engine has a remedy for its own hitches — `FixedStep:discardCatchup`, which
+absorbs the oversized frame as a single step so the animation plays out and
+simply takes a little longer. Its own comment notes that only the map-seam path
+calls it and that *"warps go through Transition instead"*, so a hitch under a
+warp's fade had nothing arming the clamp. `AUTO SAVE` now arms it after
+anything of its own that costs a frame: every write, and the frame a sync reply
+lands on.
+
+The loading screen is a little longer. It is not skipped.
+
 ## 1.16.0
 
 **A save is finished when it reaches your account, not when it reaches the
