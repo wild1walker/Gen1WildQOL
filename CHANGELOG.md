@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.14.0
+
+**`AUTO SAVE` saves in the moments you could not move anyway** (Gen1AutoSave
+1.9.0), and it no longer confuses a pause with a stop.
+
+Standing still was one frame of not walking. Letting go of the pad to change
+direction, lining up on a doorway, thinking for a second — all of those look
+identical to a stop and none of them is one, so the write went into a pause in
+the middle of a walk and read as a hitch in the middle of a walk. A stop is
+**three unbroken seconds** now, or the moment a menu closed or a conversation
+ended and you have not started moving again.
+
+That floor would have made a save wait a long time if a warp and the end of a
+battle were still the only other windows. They are not. **Any moment you could
+not move if you wanted to** is now a window:
+
+| Window | |
+| --- | --- |
+| A warp | Already behind a black screen |
+| A battle starting | Behind its own intro |
+| A battle ending | The return hold, before the fade back |
+| A text box, while an NPC talks | The conversation is holding you still |
+| The START menu, the bag, the party, a PC, a mart, a Center's heal | Same — anything over the overworld |
+| Standing still | A real stop |
+
+Nothing there is a list of named events: something over the overworld is
+something holding you still, so the middle rows are all one rule — including
+the ones the table does not name.
+
+Two are held back on purpose. **Inside** a battle nothing is written (Gen 1 has
+no save there, and the file would record the overworld the fight started from),
+and **part-way through a script** nothing is written either — a script that has
+set some of its flags and not the rest is not a state to write down. The moment
+a script *ends* is a window, and by then it is finished and you are standing
+where it left you.
+
+And the save and the sync are no longer one errand. The write is cheap and
+wants the first window it can get; the sync cycle it wakes is expensive and
+does not arrive for another few seconds. So they ask different questions and
+take different windows — the save goes down at the door, and the cycle takes
+whatever comes next.
+
 ## 1.13.2
 
 **The stutter a few seconds *after* a save is gone too** (Gen1AutoSave 1.8.0).

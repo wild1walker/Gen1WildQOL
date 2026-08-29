@@ -4,11 +4,13 @@
 -- built-in save sync's way while doing it:
 --
 --   * a save that comes due while you are walking is never written into the
---     stride: it waits for a warp's black screen, the end of a battle, or for
---     you to stop, so the frame it costs is one nobody is looking at
---   * and neither is the sync cycle the write wakes, which is the expensive
---     half and lands seconds later on network time: the plan, and the
---     collector's debt after it, wait for the same kind of frame
+--     stride: it waits for a moment you could not move in anyway -- a warp's
+--     black screen, a battle starting or ending, a text box while somebody
+--     talks, any menu -- or for you to really stop, which is three unbroken
+--     seconds and not the frame between two strides
+--   * and the sync cycle the write wakes, which is the expensive half and
+--     lands seconds later on network time, waits for the NEXT one of those
+--     rather than for the same one: two errands, two windows
 --   * the timer runs during battles and menus, not only while you stand still
 --     on the map -- the write itself still waits for a settled overworld
 --   * nothing happened since the last write => no write, so idling on the map
@@ -34,6 +36,9 @@
 return function(mod)
   local MIN_GAP = 20        -- seconds between any two autosaves
   local SYNC_RETRY = 2.0    -- re-check a busy sync this often
+  local STILL_FOR = 3.0     -- unbroken seconds of standing still on the route
+  local SETTLE_GRACE = 1.5  -- how long a menu or a conversation counts for
+                            -- after it closes
   local HOLD_GRACE = 15     -- a conflict has to stand this long to be said
   local HEAL_TRIES = 3      -- give up healing one key after this many goes
   local NOTIFY_TIME = 1.6
@@ -74,6 +79,9 @@ return function(mod)
     lastUploadAt = -math.huge,
     syncWasBusy = false,
     gcOwed = false,
+    stillFor = 0,
+    settledAt = nil,
+    wasHeld = false,
     notify = 0,
     heldTold = false,
     heldSince = nil,
@@ -139,7 +147,7 @@ return function(mod)
       type = "toggle",
       label = "SAVE ON LOADS",
       default = true,
-      help = "Save on the black screen a warp or a battle already puts up.",
+      help = "Save in a moment you could not move in anyway.",
       visible_if = { key = "enabled", equals = true },
     },
     {
@@ -226,43 +234,105 @@ return function(mod)
     return false
   end
 
-  -- Idle means STANDING STILL, which is not the same as `moving == false`.
-  -- The player's `moving` flag drops for the one frame between two strides, so
-  -- somebody walking a long route without stopping passes a `not moving` test
-  -- several times a second -- and that gap is exactly where a dropped frame is
-  -- seen, because the screen is scrolling on either side of it.  That is the
-  -- hitch this mod was reported for.  A held direction says the next stride
-  -- starts on the next frame; it is not idle, and nothing is written into it.
-  local function overworldIdle(game)
+  -- Is the game holding the player still?
+  --
+  -- A screen over the overworld is the answer to a lot of this at once: a
+  -- text box while an NPC is talking, the START menu, the bag, a mart, a PC,
+  -- a Center's heal.  In every one of them the player COULD not move if they
+  -- wanted to, and the overworld behind is a still picture.  Those are the
+  -- moments this mod wants and it does not have to name them one by one.
+  local function screenOver(game)
     local ow = game and game.overworld
-    if not (ow and ow.player) then return false end
-    if game.stack and game.stack:top() ~= ow then return false end
-    if ow.player.moving then return false end
-    if walking(game, ow) then return false end
-    if ow.runner and ow.runner.isRunning and ow.runner:isRunning() then
-      return false
-    end
-    if #(ow.scriptMoves or {}) > 0 then return false end
-    if ow.engaging or ow.emote or ow.teleportOut or ow.transitioning then
-      return false
-    end
-    return true
+    if not ow then return false end
+    local top = game.stack and game.stack.top and game.stack:top()
+    return top ~= nil and top ~= ow
   end
 
-  -- Is the screen moving?  The sibling of overworldIdle: that one decides
-  -- whether a frame is worth writing a save in, this one whether it is worth
-  -- running a sync plan or a collector step in, and both mean the same thing
-  -- by it.  A held direction counts, for the reason spelled out at
-  -- holdSyncWhileWalking: `player.moving` drops for the single frame between
-  -- two strides, and that frame is the stutter.
-  local function midStride(game)
+  local function scriptRunning(ow)
+    if not ow then return false end
+    if ow.runner and ow.runner.isRunning and ow.runner:isRunning() then
+      return true
+    end
+    return #(ow.scriptMoves or {}) > 0
+  end
+
+  -- Is the SCREEN moving -- would a dropped frame be seen on this one?
+  --
+  -- Not the same question as whether a save may be written, and the two used
+  -- to share an answer.  A battle is a fine frame to spend and a terrible one
+  -- to save in; a text box is fine for both.  This one is only ever asked
+  -- about cost, so it says yes to everything the player is not walking
+  -- through.
+  --
+  -- Standing still is not `moving == false`.  That flag drops for the single
+  -- frame between two strides, so somebody walking a route without stopping
+  -- satisfies it several times a second, and that gap is exactly where a
+  -- dropped frame is seen because the screen is scrolling on either side of
+  -- it.  Nor is it one frame of stillness: letting go of the pad to change
+  -- direction is not a pause, it is part of walking.  A real stop is
+  -- STILL_FOR seconds of one, or the moment a menu or a conversation just
+  -- ended and the player has not started moving again.
+  local function quietFrame(game)
+    local ow = game and game.overworld
+    -- No overworld at all: a title screen, the mod manager, a save select.
+    if not (ow and ow.player) then return true end
+    if screenOver(game) then return true end
+    if ow.transitioning or ow.teleportOut then return true end
+    if ow.player.moving then return false end
+    if walking(game, ow) then return false end
+    if scriptRunning(ow) then return false end
+    if state.stillFor >= STILL_FOR then return true end
+    return state.settledAt ~= nil
+      and state.clock - state.settledAt <= SETTLE_GRACE
+  end
+
+  -- May a save be WRITTEN on this frame?
+  --
+  -- Everything quietFrame wants, and two things it does not care about:
+  --
+  --   * not in a battle.  Gen 1 has no save inside one and neither has this:
+  --     the file would record the overworld the battle started from while the
+  --     player is somewhere else entirely in their head.  The end of the
+  --     battle is a window of its own and is a better one.
+  --   * not part-way through a script.  A script that has set some of its
+  --     flags and not the rest is not a state to write down; a save taken
+  --     there can put a player back into a half-finished cutscene.  The
+  --     moment it ENDS is a window -- SETTLE_GRACE below -- and by then the
+  --     script is done and the player is standing where it left them.
+  local function writeWindow(game)
     local ow = game and game.overworld
     if not (ow and ow.player) then return false end
-    if game.stack and game.stack.top and game.stack:top() ~= ow then
-      return false
+    if state.inBattle then return false end
+    if scriptRunning(ow) then return false end
+    if ow.engaging or ow.emote then return false end
+    if screenOver(game) then return true end
+    if ow.transitioning or ow.teleportOut then return false end
+    if ow.player.moving then return false end
+    if walking(game, ow) then return false end
+    if state.stillFor >= STILL_FOR then return true end
+    return state.settledAt ~= nil
+      and state.clock - state.settledAt <= SETTLE_GRACE
+  end
+
+  -- Kept per frame by the update pump.  `stillFor` is unbroken seconds of
+  -- standing on the route doing nothing; `settledAt` is when the game last
+  -- handed control back -- a menu closed, a conversation ended, a battle
+  -- finished -- which is a window in its own right, because the player is
+  -- standing exactly where the game left them and has not moved yet.
+  local function trackStillness(game, dt)
+    local ow = game and game.overworld
+    local held = state.inBattle or screenOver(game) or scriptRunning(ow)
+      or (ow and ow.player and (ow.engaging or ow.emote or ow.transitioning
+                                or ow.teleportOut)) or false
+    if state.wasHeld and not held then state.settledAt = state.clock end
+    state.wasHeld = held and true or false
+
+    if ow and ow.player and not held and not ow.player.moving
+        and not walking(game, ow) then
+      state.stillFor = state.stillFor + dt
+    else
+      state.stillFor = 0
     end
-    if ow.player.moving then return true end
-    return walking(game, ow)
   end
 
   -- Everything sync is asked goes through pcall: a host with sync compiled
@@ -567,7 +637,7 @@ return function(mod)
       state.gcOwed = true
     end
     if not state.gcOwed then return end
-    if midStride(game) then return end
+    if not quietFrame(game) then return end
     state.gcOwed = false
     settleGarbage()
   end
@@ -604,26 +674,21 @@ return function(mod)
   -- the cheap one that STARTS a cycle, and holding that would stop the clock
   -- for no reason.
   --
-  -- "Mid-step" is the same question overworldIdle asks about the write, and it
-  -- has to be asked the same way, for the same reason.  This used to read
-  -- `player.moving` alone, which drops for the one frame between two strides:
-  -- a player walking a long route without stopping offered this test an
-  -- opening several times a second, and the plan took it.  So the hold was
-  -- released into the exact frame it exists to protect.
+  -- The frame it runs on is quietFrame's to choose, and the save's write is
+  -- NOT waiting for it.  Those are two separate errands and pairing them was
+  -- costing both: the write is cheap and wants the first window it can get,
+  -- the plan is expensive and arrives seconds later on network time.  So the
+  -- save goes down at the door the player walked through, and the cycle it
+  -- woke takes whatever window comes next -- the next door, the next battle,
+  -- the next conversation, or the player stopping.
   --
-  -- And there is no cap on the hold now.  There was one -- three seconds, on
-  -- the reasoning that a player crossing Route 21 without letting go must not
-  -- starve sync -- and it did not check that they had stopped either: it
-  -- counted to three and then ran the plan wherever it landed.  Between the
-  -- two, the stall the player reported a moment after every save was not an
-  -- edge case, it was the ordinary path.
-  --
-  -- Holding costs nothing but time.  The reply is already in hand, the engine's
-  -- own clock stops with the hold so nothing fires early to make the time back,
-  -- and the same three doors that release a due save release this: a warp, a
-  -- battle, or the player standing still.  Any menu, text box or doorway takes
-  -- the overworld off the top of the stack and releases it immediately too.
-  -- (midStride is defined next to `walking` above, because settleSyncGarbage
+  -- There is no cap on the hold.  There was one -- three seconds -- and it did
+  -- not check that the player had stopped: it counted to three and ran the
+  -- plan wherever it landed.  Holding costs nothing but time.  The reply is
+  -- already in hand, the engine's own clock stops with the hold so nothing
+  -- fires early to make the time back, and every window in the game releases
+  -- it.
+  -- (quietFrame is defined next to `walking` above, because settleSyncGarbage
   -- asks it too.)
 
   local function holdSyncWhileWalking(game)
@@ -636,7 +701,7 @@ return function(mod)
       local hold = on()
         and mod.options:get("quiet_sync") ~= false
         and self.pending
-        and midStride(state.game)
+        and not quietFrame(state.game)
       if hold then return end
       return update(self, dt)
     end
@@ -760,11 +825,12 @@ return function(mod)
   -- map, the player's cell and the facing are all in place, and the transition
   -- is still up -- coherent state, screen still covered.
   --
-  -- The overworld is NOT idle at either moment: the transition owns the top of
-  -- the stack and the player has just been placed.  overworldIdle would refuse
-  -- every one of these, so the load path asks the questions that still matter
-  -- -- nothing in flight, sync settled -- and skips the one that is only there
-  -- to keep a write off a moving player.
+  -- The overworld is NOT idle at any of these moments: the transition or the
+  -- battle owns the top of the stack and the player has just been placed.
+  -- writeWindow would refuse every one of them, so this path asks the
+  -- questions that still matter -- nothing in flight, sync settled, the
+  -- script finished -- and skips the one that is only there to keep a write
+  -- off a moving player.
   local function loadScreenWrite(game, why)
     if not game then return end
     if not on() then return end
@@ -774,9 +840,7 @@ return function(mod)
     if state.clock - state.lastWriteAt < MIN_GAP then return end
     local ow = game and game.overworld
     if ow and ow.player and ow.player.moving then return end
-    if ow and ow.runner and ow.runner.isRunning and ow.runner:isRunning() then
-      return
-    end
+    if scriptRunning(ow) then return end
     if not syncSettled(game) then return end
     mod.log:info("autosave on a %s screen", tostring(why))
     write(game)
@@ -814,7 +878,14 @@ return function(mod)
     end)
   end
 
-  mod.events:on("battle.started", function() state.inBattle = true end)
+  mod.events:on("battle.started", function()
+    -- Before the flag: this write is about the overworld the battle started
+    -- from, and it goes down behind the battle's own intro, which is as
+    -- covered a screen as the game has.  After the flag, writeWindow would
+    -- refuse it and rightly so.
+    loadScreenWrite(state.game, "battle start")
+    state.inBattle = true
+  end)
   mod.events:on("battle.ended", function() state.inBattle = false end)
 
   -- The two screens the game blacks out on its own.  Both fire while their
@@ -1455,6 +1526,11 @@ return function(mod)
 
     if not on() then return end
 
+    -- Before anything asks whether this frame is a good one: how long the
+    -- player has been standing on it, and when the game last handed control
+    -- back to them.
+    trackStillness(game, dt)
+
     -- Installed on the engine instance the first frame there is one to install
     -- it on: sync is built lazily and a mod loaded before it would find
     -- nothing.  Idempotent, so this is a table lookup on every frame after.
@@ -1497,13 +1573,17 @@ return function(mod)
     if state.clock - state.lastWriteAt < MIN_GAP then return end
 
     -- And the rule the whole mod is arranged around: never while walking.
-    -- overworldIdle is where that is decided -- a held direction is not idle,
-    -- whatever the current frame's `moving` says -- so a due save simply waits
-    -- here for as long as the walking lasts.  It leaves by one of three doors:
-    -- a warp, the end of a battle, or the player stopping.  There is no fourth
-    -- and no timer that gives up and writes anyway, because the frame that
-    -- would land on is the one frame the player would see.
-    if not overworldIdle(game) then return end
+    -- writeWindow is where that is decided, and what it looks for is a moment
+    -- the player COULD not move -- a text box while an NPC talks, a menu, a
+    -- shop, a PC -- or a real stop, which is STILL_FOR seconds of standing
+    -- there or the moment one of those just ended.  Letting go of the pad for
+    -- a frame to change direction is not a stop; that is part of walking, and
+    -- treating it as an opening put the write back in the middle of the walk.
+    --
+    -- A due save waits here for as long as the walking lasts.  There is no
+    -- timer that gives up and writes anyway, because the frame that would land
+    -- on is the one frame the player would see.
+    if not writeWindow(game) then return end
     local settled, why = syncSettled(game)
     if not settled then
       -- A conflict against our own lost upload is answerable here and now, and
