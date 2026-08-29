@@ -977,6 +977,354 @@ do
   eq(partial["gen1wild_mod_menu"], "gen1_wild_ui", "independently of the other")
 end
 
+-- ------------------------------------------------------- the nested menu
+--
+-- Four rows fit on a screen, so the shape of the menu is not decoration: a
+-- flat list of a dozen features was four screenfuls to walk through.  These
+-- pin the three things that make it one and a half -- the folder cards, the
+-- other half of the suite's features shown beside this half's, and the other
+-- loaded mods' own options reachable from the same screen.
+
+-- A game with just enough of the engine's shape for the menu to read and
+-- write through: a save's options bucket, and a loader carrying other mods'
+-- schemas the way Loader:status and Loader.optionSchemas do.
+local function fakeGame(otherMods)
+  local game
+  game = {
+    save = { options = { modOptions = {} } },
+    writes = 0,
+    pushed = {},
+    stack = { push = function() end, pop = function() end },
+  }
+  function game:writeOptions() self.writes = self.writes + 1 end
+
+  local loaded, schemas = {}, {}
+  for _, entry in ipairs(otherMods or {}) do
+    loaded[#loaded + 1] = { id = entry.id, name = entry.name }
+    schemas[entry.id] = entry.schema
+  end
+  game.mods = {
+    optionSchemas = schemas,
+    modOptions = {},
+    emitted = {},
+    status = function(self_)
+      return { loaded = loaded, cart = self_.cart }
+    end,
+    cartStatus = function(self_) return self_.cart end,
+    events = { emit = function(self_, name, payload)
+      game.mods.emitted[#game.mods.emitted + 1] = { name = name, payload = payload }
+    end },
+  }
+  return game
+end
+
+local function screenOf(mod, id, opts)
+  local factory = mod.screens[id]
+  if not factory then return nil end
+  return factory.new(fakeGame(), opts)
+end
+
+local function labelsOf(screen)
+  local out = {}
+  for i, entry in ipairs(screen.entries) do out[i] = entry.label end
+  return table.concat(out, ",")
+end
+
+-- A bundle whose features are pure schema: nothing to install, everything to
+-- show.  Three cards' worth, plus one feature that names no card at all.
+local function menuFixture(modId, screenId, pairedId, featureList)
+  local mod = fakeMod(modId)
+  for _, feature in ipairs(featureList) do
+    mod.files["modules/" .. feature.dir .. "/main.lua"] = ([[
+      return function(mod)
+        mod.options:define({
+          { key = "enabled", type = "toggle", label = "ON", default = true },
+          { key = "flavour", type = "choice", label = "FLAVOUR", default = "a",
+            choices = { { "A", "a" }, { "B", "b" } } },
+        })
+      end
+    ]])
+  end
+  local spec = {
+    id = modId, menu_label = modId:upper(), screen_id = screenId,
+    paired_bundle = pairedId,
+    groups = {
+      { id = "world", label = "OUT IN THE WORLD" },
+      { id = "pokemon", label = "YOUR POKEMON" },
+      { id = "battles", label = "BATTLES" },
+    },
+  }
+  return mod, spec
+end
+
+do
+  io.write("the menu nests its features under folder cards\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local features = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+    { id = "banners", dir = "Banners", entry = "main.lua", label = "AREA BANNER",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+    { id = "follower", dir = "Follower", entry = "main.lua", label = "FOLLOWERS",
+      group = "pokemon", enabledKey = "enabled", default = true, priority = 100 },
+    { id = "loose", dir = "Loose", entry = "main.lua", label = "LOOSE",
+      enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local mod, spec = menuFixture("gen1_wild_qol", "Gen1WildQOL", "gen1_wild_ui",
+                                features)
+  Bundle.install(mod, spec, features)
+
+  local root = screenOf(mod, "Gen1WildQOL")
+  ok(root, "the root screen is registered")
+  eq(labelsOf(root), "OUT IN THE WORLD,YOUR POKEMON,LOOSE",
+     "cards in declared order, then whatever named no card")
+  eq(root.entries[1].kind, "card", "a card is a card")
+  eq(root.entries[3].kind, "feature", "and a feature that named none is a row")
+  ok(mod.screens["Gen1WildQOL__battles"],
+     "an empty card still has a screen, in case a feature moves into it")
+
+  -- BATTLES has nothing in it and is not drawn.  A card that shows up empty is
+  -- worse than one that is missing: it is a promise of settings that are not
+  -- there.
+  for _, entry in ipairs(root.entries) do
+    ok(entry.label ~= "BATTLES", "an empty card is not drawn")
+  end
+
+  eq(root:valueOf(root.entries[1]), "ALL 2 ON", "a card counts what is on")
+  mod.stored["sprint_enabled"] = false
+  local again = screenOf(mod, "Gen1WildQOL")
+  eq(again:valueOf(again.entries[1]), "1 OF 2 ON", "and says so when one is off")
+  mod.stored["sprint_enabled"] = true
+
+  local card = screenOf(mod, "Gen1WildQOL__world")
+  ok(card, "the card has a screen of its own")
+  eq(labelsOf(card), "SPRINT,AREA BANNER", "holding the features that named it")
+  eq(card.entries[1].screenId, "Gen1WildQOL_sprint",
+     "each of which opens its own settings screen")
+
+  -- The master row was donated to the card above -- that is what enabledKey
+  -- means -- so the settings screen is what is left of the schema.
+  local settings = screenOf(mod, "Gen1WildQOL_sprint")
+  eq(labelsOf(settings), "FLAVOUR,RESET DEFAULTS",
+     "which is the schema, unchanged by the tier above it")
+end
+
+-- ----------------------------------------------- one door on OPTIONS, once
+
+do
+  io.write("the suite hangs off one row on the game's OPTION screen\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local features = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local mod, spec = menuFixture("gen1_wild_qol", "Gen1WildQOL", "gen1_wild_ui",
+                                features)
+  Bundle.install(mod, spec, features)
+
+  local wrapper
+  for _, entry in ipairs(mod.hooked) do
+    if entry.name == "ui.options.rows" then wrapper = entry.fn end
+  end
+  ok(wrapper, "the bundle hooks the OPTION screen's row list")
+
+  local game = fakeGame()
+  local function vanilla()
+    return { { id = "textSpeed" }, { id = "mods" }, { id = "tilt" } }
+  end
+  local out = wrapper(function(_, rows) return rows end, game, vanilla())
+  eq(#out, 4, "one row added")
+  eq(out[3].id, "gen1wild_options", "next to MODS, where the player just was")
+  eq(out[3].label, "GEN1_WILD_QOL",
+     "named after this bundle when no cart is running")
+  eq(out[3].group, true, "and marked as a folder card, which is what it is")
+
+  -- The other half of the suite runs the same hook. Two identical doors onto
+  -- the same menu is the thing this id is for.
+  local twice = wrapper(function(_, rows) return rows end, game, out)
+  eq(#twice, 4, "the other half finds the row already there and leaves it")
+
+  -- A cart names the row instead: WILD GREEN is what the player installed.
+  game.mods.cart = { title = "Wild Green", pins = { gen1_wild_qol = {} } }
+  local carted = wrapper(function(_, rows) return rows end, game, vanilla())
+  eq(carted[3].label, "WILD GREEN", "a cart's own title names the door")
+end
+
+-- ------------------------------------------- both halves, one merged menu
+
+do
+  io.write("each half of the suite shows the other half's features\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local qolFeatures = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local uiFeatures = {
+    { id = "arena", dir = "Arena", entry = "main.lua", label = "BACKDROPS",
+      group = "battles", enabledKey = "enabled", default = true, priority = 100 },
+    { id = "dex", dir = "Dex", entry = "main.lua", label = "POKEDEX",
+      group = "pokemon", enabledKey = "enabled", default = true, priority = 100 },
+  }
+
+  local qol, qolSpec = menuFixture("gen1_wild_qol", "Gen1WildQOL",
+                                   "gen1_wild_ui", qolFeatures)
+  local ui, uiSpec = menuFixture("gen1_wild_ui", "Gen1WildUI",
+                                 "gen1_wild_qol", uiFeatures)
+  Bundle.install(qol, qolSpec, qolFeatures)
+  Bundle.install(ui, uiSpec, uiFeatures)
+
+  ok(ui.exports.menu, "a bundle publishes a description of its own menu")
+  eq(#ui.exports.menu.features, 2, "one entry per feature it kept")
+  eq(ui.exports.menu.features[1].screen_id, "Gen1WildUI_arena",
+     "naming the screen it registered for each")
+  ok(type(ui.exports.optionWrite) == "function",
+     "and a writer, so the other half's row is a switch and not a readout")
+
+  -- Before the two find each other, each menu is its own.
+  eq(labelsOf(screenOf(qol, "Gen1WildQOL")), "OUT IN THE WORLD",
+     "with one half installed the menu is that half's")
+
+  qol.found["gen1_wild_ui"] = { id = "gen1_wild_ui", version = "1.0.0",
+                                exports = ui.exports }
+
+  local root = screenOf(qol, "Gen1WildQOL")
+  eq(labelsOf(root), "OUT IN THE WORLD,YOUR POKEMON,BATTLES",
+     "with both installed, either menu is the whole suite")
+
+  local battles = screenOf(qol, "Gen1WildQOL__battles")
+  eq(labelsOf(battles), "BACKDROPS", "a card the other half filled")
+  eq(battles.entries[1].screenId, "Gen1WildUI_arena",
+     "opening the screen the bundle that owns it registered")
+
+  -- The switch is the other bundle's, and moving it here moves it there.
+  eq(ui.stored["arena_enabled"], nil, "untouched to begin with")
+  eq(battles:valueOf(battles.entries[1]), "ON (CONFIGURE)", "and reads as on")
+  ui.exports.optionWrite("arena_enabled", false, fakeGame())
+  local after = screenOf(qol, "Gen1WildQOL__battles")
+  eq(after:valueOf(after.entries[1]), "OFF",
+     "a write on the owning bundle shows up on this one's row")
+  ui.stored["arena_enabled"] = nil
+end
+
+-- --------------------------------------------- the other mods that are loaded
+
+do
+  io.write("every other loaded mod's options are reachable from the same menu\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local features = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local mod, spec = menuFixture("gen1_wild_qol", "Gen1WildQOL", "gen1_wild_ui",
+                                features)
+  Bundle.install(mod, spec, features)
+
+  local others = {
+    { id = "wild_green", name = "Make It Green", schema = {
+        { key = "grass", type = "toggle", label = "GREEN GRASS", default = true },
+        { key = "shade", type = "choice", label = "SHADE", default = "mid",
+          choices = { { "DARK", "dark" }, { "MID", "mid" } },
+          visible_if = { key = "grass", equals = true } },
+      } },
+    -- No schema: nothing to show, so no row rather than an empty screen.
+    { id = "quiet_mod", name = "Quiet", schema = nil },
+  }
+
+  local factory = mod.screens["Gen1WildQOL"]
+  local game = fakeGame(others)
+  local root = factory.new(game)
+  eq(labelsOf(root), "OUT IN THE WORLD,OTHER MODS",
+     "the rest of what is loaded gets a card of its own, last")
+  eq(root:valueOf(root.entries[2]), "1 MODS",
+     "counting only the ones that have settings")
+
+  local card = mod.screens["Gen1WildQOL__other_mods"].new(game)
+  eq(labelsOf(card), "MAKE IT GREEN", "listed by the name its manifest gives")
+
+  local page = mod.screens["Gen1WildQOL__mod"].new(game, { modId = "wild_green" })
+  eq(labelsOf(page), "GREEN GRASS,SHADE,RESET DEFAULTS",
+     "and its own schema is the screen")
+  eq(page:valueOf(page.entries[1]), "ON", "reading its defaults")
+
+  -- Written the way the mod manager writes them: both tables, the save
+  -- persisted, and the event the mod itself is listening for.
+  local before = game.writes
+  local screen = mod.screens["Gen1WildQOL__mod"].new(game, { modId = "wild_green" })
+  screen.game.input = {
+    wasPressed = function(_, button) return button == "left" end,
+  }
+  screen:update()
+  eq(game.save.options.modOptions.wild_green.grass, false,
+     "a step writes the save's own mod options")
+  eq(game.mods.modOptions.wild_green.grass, false, "and the loader's mirror")
+  ok(game.writes > before, "and persists them")
+  eq(game.mods.emitted[#game.mods.emitted].name, "mod.options_changed",
+     "and tells the mod its option moved")
+
+  -- SHADE hangs off GREEN GRASS, which is now off, so it is not drawn.
+  local hidden = mod.screens["Gen1WildQOL__mod"].new(game, { modId = "wild_green" })
+  eq(labelsOf(hidden), "GREEN GRASS,RESET DEFAULTS",
+     "visible_if is honoured for another mod's rows too")
+end
+
+-- --------------------------------------------- the cards the shipped list uses
+--
+-- Both halves of the suite declare the same cards in the same order, because
+-- either half can end up hosting the merged menu (runtime/menu.lua) and a
+-- player who opens GEN1WILD UI should not get a differently-ordered version of
+-- the screen GEN1WILD QOL would have shown.  The literal below is that
+-- agreement written down; the other half's suite carries the same one, so
+-- editing one repo's cards without the other fails here.
+
+do
+  io.write("every feature names one of the cards, and both halves agree on them\n")
+
+  local registry = load_("features.lua")
+  local groups = registry.spec.groups
+  ok(type(groups) == "table", "the spec declares its cards")
+
+  local declared, order = {}, {}
+  for i, group in ipairs(groups or {}) do
+    declared[group.id] = group.label
+    order[i] = group.id
+  end
+  eq(table.concat(order, ","), "world,pokemon,battles,items,saving,setup",
+     "the cards, in the order both halves draw them")
+
+  -- The labels are drawn on the card, so they are part of the agreement too.
+  eq(declared.world, "OUT IN THE WORLD", "world reads as a place")
+  eq(declared.setup, "MOD SETUP", "and the furniture says what it is")
+
+  local homeless = {}
+  for _, feature in ipairs(registry.features) do
+    if not (feature.group and declared[feature.group]) then
+      homeless[#homeless + 1] = feature.id
+    end
+  end
+  eq(table.concat(homeless, ","), "",
+     "every shipped feature sits on a card rather than loose on the top level")
+
+  -- The card the other loaded mods go under is built by the menu, not declared
+  -- here; a group of the same id would shadow it.
+  ok(declared.other_mods == nil, "nothing declares the card the menu reserves")
+end
+
 -- ------------------------------------------------------------------ done
 
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))
