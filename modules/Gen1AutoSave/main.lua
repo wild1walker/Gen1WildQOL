@@ -34,8 +34,10 @@
 -- debounce), so nothing here has to ask for a sync -- only choose how often
 -- to let one happen, and pay for what a save leaves behind at the save:
 --
---   * at most one autosave-woken upload every five minutes; the rest ride the
---     engine's own sweep, which uploads anything whose savedAt moved anyway
+--   * the upload goes with the save and goes at once: a save is finished when
+--     it reaches the account, not when it reaches the disk, and the five
+--     second debounce would only move the request off the black screen it
+--     could have left from
 --   * finish the collector's cycle in the frame that wrote the file, and in
 --     the frame a sync cycle ended, rather than on the route after either
 
@@ -51,7 +53,6 @@ return function(mod)
   local GC_STEP = 512       -- collector work per step, in KB of allocation
   local GC_STEPS = 2        -- and no more than this, so the nudge can never
                             -- become a whole collection cycle
-  local UPLOAD_GAP = 300    -- least time between two autosave-woken uploads
 
   local BOX_W, BOX_H = 20, 3
   local ICON_W, ICON_H = 7, 3
@@ -83,7 +84,6 @@ return function(mod)
     inBattle = false,
     saving = false,
     syncWaitUntil = 0,
-    lastUploadAt = -math.huge,
     syncWasBusy = false,
     gcOwed = false,
     stillFor = 0,
@@ -578,49 +578,50 @@ return function(mod)
     end
   end
 
-  -- The second is the upload the write woke, and it is the expensive one.
+  -- The second is the upload the write woke.
   --
   -- writeSave tells the sync engine it happened, which arms a five second
-  -- upload debounce.  When that fires the engine asks the server for its
-  -- state, and plans against the reply on the main thread -- planning being
+  -- debounce.  When that fires the engine asks the server for its state and
+  -- plans against the reply on the main thread -- planning being
   -- SyncEngine.defaultSaves's list(), which reads and DECODES every save slot
-  -- of every game version before any of it reaches a worker.  Decoding runs
-  -- SaveSerializer's restricted-grammar reader: a character-at-a-time parser
-  -- written in Lua, deliberately, so a tampered save fails to parse instead
-  -- of executing.  A quarter-megabyte slot costs tens of milliseconds, per
-  -- slot on disk, across six versions -- and a phone is worse.
+  -- of every game version before any of it reaches a worker.  A quarter-
+  -- megabyte slot costs tens of milliseconds, per slot, across six versions,
+  -- and a phone is worse.
   --
-  -- So every autosave bought a second stall, several frames long, a moment
-  -- after the write -- by which time the player is walking again and has no
-  -- reason to connect it to a save.  Saves land as often as every 20 seconds,
-  -- and so did that stall.  It was the loudest thing this mod did to a linked
-  -- device.
+  -- THAT COST IS PLACED, NOT AVOIDED.  This used to avoid it: at most one
+  -- autosave-woken upload every five minutes, every other write's debounce
+  -- disarmed, the file left for the engine's own sweep to carry up whenever it
+  -- next came round.  It was cheaper and it was wrong.  A save is not finished
+  -- when it reaches the disk; it is finished when it reaches the account, and
+  -- that policy left the newest save on one device for up to five minutes
+  -- while a second device could still be handed the old one.  Nothing was
+  -- lost, but the save and the server were out of step for minutes at a time,
+  -- which is the whole thing sync is for.
   --
-  -- None of that work can be made cheaper from here.  It is the engine's, and
-  -- it has to happen.  What can be chosen is how often.
+  -- So the upload goes with the save now, every time.  What makes that
+  -- affordable is where the frames land, and both of those are already
+  -- decided: a write only happens in a window the player cannot move in, and
+  -- the plan is held out of any frame the screen is moving in (see
+  -- holdSyncWhileWalking).  A sync cycle costs what it costs; it just does not
+  -- cost it anywhere anybody is looking.
   --
-  -- At most one autosave-woken upload every UPLOAD_GAP.  Writes in between
-  -- still land on disk; their debounce is disarmed, and the engine's own five
-  -- minute sweep (SyncEngine.AUTO_INTERVAL, re-armed after every sync) carries
-  -- them up, because planning compares each slot's savedAt against the
-  -- revision it last saw and uploads anything that moved.  Nothing is lost,
-  -- and a linked device stops paying for a sync cycle every 20 seconds to
-  -- learn what one cycle every five minutes was going to tell it anyway.
-  local function paceUpload(game)
-    -- Picking QUIT is exempt.  There is no five minute sweep coming for a
-    -- game that is about to stop running, so that write's upload goes now or
-    -- never -- and stepQuit pulls it forward and then waits on it.
-    if state.quit then return end
-    if state.clock - state.lastUploadAt >= UPLOAD_GAP then
-      state.lastUploadAt = state.clock
-      return
-    end
+  -- And it goes IMMEDIATELY.  The five second debounce exists to coalesce a
+  -- burst of writes, and this mod does not make bursts -- MIN_GAP already puts
+  -- twenty seconds between any two.  Five seconds of waiting is therefore dead
+  -- time in the worst possible place: a door's black screen is up NOW, and
+  -- five seconds later the player is halfway down the next corridor.  Pulled
+  -- forward, the request leaves while that screen is still black and the reply
+  -- comes back to it, or to the frames just after it, instead of to a walk.
+  -- The loading screen is a little longer for it, which is the trade.
+  --
+  -- Only ever an upload writeSave itself armed: a nil uploadAt means sync is
+  -- off, unlinked, or has nothing to send, and none of those is ours to start.
+  local function pushUpload(game)
     local engine = syncEngineOf(game)
     if not engine then return end
-    -- Only ever our own debounce: a manual save resets the write clock, so
-    -- MIN_GAP puts 20 seconds between it and the next autosave, and the
-    -- debounce it armed is 5 seconds long.
-    pcall(function() engine.uploadAt = nil end)
+    pcall(function()
+      if engine.uploadAt then engine.uploadAt = engine.clock or 0 end
+    end)
   end
 
   -- And a sync cycle leaves the same debt behind it, more of it than the
@@ -797,7 +798,7 @@ return function(mod)
       state.dirty = false
       state.due = false
       state.lastWriteAt = state.clock
-      paceUpload(game)
+      pushUpload(game)
       settleGarbage()
       announce()
       mod.log:info("autosave written")
@@ -965,15 +966,6 @@ return function(mod)
     state.dirty = false
     state.due = false
     state.lastWriteAt = state.clock
-    -- A manual save wakes the sync engine exactly the way ours does, and its
-    -- upload does the same planning work.  Count it: the next autosave has
-    -- nothing to tell sync that this one is not already on its way to say.
-    --
-    -- Not when the write is ours.  writeSave emits this from inside write(),
-    -- before paceUpload has decided anything, so counting our own write here
-    -- would leave the gap permanently closed and no autosave would ever wake
-    -- sync again.  state.saving is set for exactly that window.
-    if not state.saving then state.lastUploadAt = state.clock end
   end)
 
   local function reset()
@@ -981,7 +973,6 @@ return function(mod)
     state.dirty = false
     state.due = false
     state.inBattle = false
-    state.lastUploadAt = -math.huge
     state.syncWasBusy = false
     state.notify = 0
     state.heldTold = false

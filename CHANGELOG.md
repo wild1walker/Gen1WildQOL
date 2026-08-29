@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.16.0
+
+**A save is finished when it reaches your account, not when it reaches the
+disk** (Gen1AutoSave 1.12.0).
+
+`AUTO SAVE` used to pace uploads: one autosave-woken upload every five minutes,
+every other write's upload **disarmed**, the file left for the engine's own
+sweep to carry up whenever it next came round. It was written when a sync cycle
+meant a visible stall, and it bought cheapness at the cost of the save being
+current — the newest file could sit on one device for minutes while a second
+device was still handed the old one.
+
+The reason it existed is gone. The stall was never the sync; it was the
+collector burst, removed in 1.14.1. So the cost is *placed* now rather than
+avoided — a write only happens in a window you cannot move in, and the sync
+plan is held out of any frame the screen is moving in.
+
+**The upload now goes with every save, and it goes immediately.** The engine's
+five-second debounce exists to coalesce a burst of writes, and there are no
+bursts here — the floor between any two saves is already twenty seconds. Those
+five seconds only moved the request off the black screen it could have left
+from and into the middle of the next corridor. Pulled forward, it leaves while
+that screen is still black. **The loading screen is a little longer for it**,
+which is the trade.
+
 ## 1.15.0
 
 **`AUTO SAVE` no longer treats a route seam as a door** (Gen1AutoSave 1.11.0).
