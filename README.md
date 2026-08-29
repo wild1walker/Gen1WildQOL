@@ -46,22 +46,38 @@ credit for what it does still belongs to the people named in
 
 ```
 OPTION
-  GEN1WILD QOL        CONFIGURE
-    SPRINT            ON (CONFIGURE)     <- LEFT/RIGHT switches it
-      HOLD            B                  <- A opens this
-      SPRINT SPEED    2x
-      BIKE SPEED      2x
-      SPRINT SURFING  OFF
-      SPRINT ON BIKE  OFF
-      RESET DEFAULTS
-    AUTO SAVE         ON (CONFIGURE)
-    AREA BANNER       ON (3 SECONDS)
-    ...
+  WILD GREEN          13 MODS            <- in place of the MODS row
+    GENERAL           ALL 4 ON
+      SPRINT          ON (CONFIGURE)     <- LEFT/RIGHT switches it
+        HOLD          B                  <- A opens this
+        SPRINT SPEED  2x
+        BIKE SPEED    2x
+        SPRINT SURFING  OFF
+        SPRINT ON BIKE  OFF
+        RESET DEFAULTS
+      AREA BANNER     ON (3 SECONDS)
+      ...
+    POKEMON           ALL 3 ON
+    BATTLE            ALL 2 ON
+    SAVE              ALL 2 ON
+    INTERFACE         ALL 2 ON
+    OTHER MODS        2 MODS             <- anything else that is loaded
+    MOD MANAGER       13 INSTALLED       <- the engine's own MODS screen
 ```
 
-`LEFT`/`RIGHT` switches a feature or changes a setting, `A` opens a feature's
-settings or explains a row, `B` goes back. Every feature screen ends in
-`RESET DEFAULTS`.
+The top row takes the OPTION screen's own `MODS` row rather than sitting next
+to it, and `START > MODS` opens the same screen. It is named after the cart
+when one is running — `WILD GREEN` — and after the bundle (`GEN1WILD QOL`) when
+one half is installed on its own. The engine's mod list is `MOD MANAGER` at the
+bottom, one press further in.
+
+The cards are the same six in both halves and in the same order, so the menu
+reads the same way round whichever half you opened. A card with nothing in it
+is not drawn.
+
+`LEFT`/`RIGHT` switches a feature or changes a setting, `A` opens a card, a
+feature's settings, or an explanation of the row, `B` goes back. Every feature
+screen ends in `RESET DEFAULTS`.
 
 A row marked `*` needs a relaunch to take effect, and the footer says so. That
 happens for features whose upstream mod has no off switch of its own: the
