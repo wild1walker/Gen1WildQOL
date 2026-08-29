@@ -1203,16 +1203,60 @@ return function(mod)
   -- ----------------------------------------------------------------------
   -- 9. PikachuFollower function wrappers
   -- ----------------------------------------------------------------------
-  local function wrappedOnMapEntered(game, ow, opts)
+  -- Nothing in the engine keeps the follower off an NPC's cell: its spawn
+  -- picks the cell behind the player's facing and asks the MAP whether that
+  -- cell is walkable, which a shopkeeper standing on it does not change
+  -- (PikachuFollower.spawnCell -> Map:isWalkableCell).  So it can arrive
+  -- squarely on top of somebody -- one sprite drawn over another, with no
+  -- way to tell which of the two the A button will reach.
+  --
+  -- The player's own cell is the one square that is always free: the
+  -- follower is drawn under him there and trails out on his next step,
+  -- which is exactly where a fresh map entry puts it anyway.  So an
+  -- occupied spawn falls back to it rather than being left stacked.
+  local function unstackFollower(ow)
+    if type(ow) ~= "table" then return false end
+    local player = ow.player
+    if not (player and player.cellX) then return false end
+    local follower
+    for _, npc in ipairs(ow.npcs or {}) do
+      if npc and npc.pikachuFollower then follower = npc break end
+    end
+    if not (follower and follower.cellX) then return false end
+    for _, npc in ipairs(ow.npcs or {}) do
+      if npc ~= follower and npc and npc.cellX == follower.cellX
+         and npc.cellY == follower.cellY then
+        follower.cellX, follower.cellY = player.cellX, player.cellY
+        follower.px = follower.cellX * 16
+        follower.py = follower.cellY * 16
+        return true
+      end
+    end
+    return false
+  end
+
+  -- `...` carries viaMapLoad, and dropping it was the follower walking out
+  -- of doorways in the wrong place.  The engine's fourth argument is what
+  -- separates a map ENTRY -- a warp, a door, the boot -- from a mid-map
+  -- respawn: an entry parks the follower on the player's own cell so it
+  -- comes out of the door behind him, and only a respawn takes the cell
+  -- behind his facing (PikachuFollower.onMapEntered, #863).  A wrapper that
+  -- takes three arguments and passes three made every map entry look like a
+  -- respawn, so stepping out of a building put the follower on the cell the
+  -- player was facing away from -- back through the door, inside the
+  -- building -- and on a busy map, on top of whoever was standing there.
+  local function wrappedOnMapEntered(game, ow, opts, ...)
     -- Before the map's own objects are built: the sheet a map POKeMON gets is
     -- read at NPC construction, and this is what puts it in the record.
     pcall(refreshOverworldMonDefs, game)
     local mon = getActiveFollowerMon(game, true)
     if mon then configureSpriteDef(game, mon) end
-    local result = originalOnMapEntered and originalOnMapEntered(game, ow, opts)
+    local result = originalOnMapEntered
+      and originalOnMapEntered(game, ow, opts, ...)
     if ow and not shouldSpawn(game, ow) then
       purgeFollowerEntities(ow)
     else
+      pcall(unstackFollower, ow)
       syncLiveFollowerDef(game, ow)
     end
     return result

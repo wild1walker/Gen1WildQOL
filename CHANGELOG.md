@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.23.1
+
+### Fixed
+- **The follower stops walking out of doors into the building** (Gen1Follower
+  1.5.1). The engine tells its follower routine whether a map is being
+  ENTERED -- a warp, a door, the boot -- or whether this is a mid-map respawn,
+  and the two put the follower in different squares: an entry parks it on the
+  player's own cell so it comes out of the doorway behind him, a respawn takes
+  the cell behind his facing. The mod's wrapper was dropping that argument, so
+  every door was treated as a respawn, and stepping outside the player faces
+  down -- putting the follower on the cell he had just come through.
+
+  It also no longer arrives on top of an NPC. The spawn rule asks the map
+  whether a cell is walkable, which somebody standing on it does not change;
+  an occupied cell now hands the follower back to the player's own.
+
 ## 1.23.0
 
 ### Fixed
