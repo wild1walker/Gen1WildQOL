@@ -94,5 +94,155 @@ end
 -- the engine has cleared the HUD out from under the bar" -- moved with the
 -- feature.  It is asserted in Gen1BattleUI's suite now, not here.
 
+-- ------------------------------- the SELECT menu is a list other mods can join
+--
+-- It is built fresh on every press out of what is usable RIGHT NOW -- FLY only
+-- outdoors, FLASH only in the dark, a repel only while one is in the bag -- so
+-- it is not a menu with a fixed shape.  That is what the row ids are for: a
+-- label is what a row says and moves with the language and with which repel is
+-- in the bag, an id is what the row IS.
+--
+-- And the list is handed round before it is drawn.  A registry rather than a
+-- hook, because mod.hooks gives a mod `wrap` and no way to emit one of its
+-- own; Gen1Dex's area.provide is the same answer to the same problem.
+
+do
+  io.write("the SELECT menu carries ids, a MAP row, and other mods' rows\n")
+
+  -- Engine stand-ins, kept to what this one menu touches.
+  local pushed = {}
+  local realLoaded = {}
+  local function stub(name, value)
+    realLoaded[name] = package.loaded[name]
+    package.loaded[name] = value
+  end
+  stub("src.world.FieldDefaults", { field = function() return {} end })
+  stub("src.world.Map", {
+    isOutside = function(def) return def and def.outside == true end,
+  })
+  stub("src.core.Strings", setmetatable({}, {
+    __call = function(_, text) return text end,
+  }))
+  stub("src.inventory.Bag", { remove = function() end,
+                              count = function() return 0 end })
+  stub("src.render.TextBox", { new = function() return {} end })
+  stub("src.core.ItemEffects", { use = function() return "consumed" end })
+  stub("src.world.OverworldController", { handleInput = function() end })
+  stub("src.world.World", {})
+  stub("src.render.Transition", { whiteFlash = function() return {} end })
+
+  local options = { qol_easy_interactions = true }
+  local logged = {}
+  local mod = {
+    id = "qol",
+    exports = {},
+    log = { warn = function(_, f, e) logged[#logged + 1] = tostring(f) end,
+            info = function() end },
+    ui = {
+      Menu = { new = function(_, items, opts)
+        local menu = { items = items, opts = opts }
+        pushed[#pushed + 1] = menu
+        return menu
+      end },
+      push = function(_, id, o) pushed[#pushed + 1] = { screen = id, opts = o } end,
+    },
+    hooks = { wrap = function() end },
+    events = { on = function() end, once = function() end },
+    world = {},
+  }
+  local services = {
+    options = { value = function(_, key) return options[key] end },
+  }
+
+  local ow = {
+    map = { id = "ROUTE_1", def = { id = "ROUTE_1", outside = true,
+                                    tileset = "OVERWORLD" } },
+    dark = false,
+    partyKnows = function(_, move) return move == "FLY" end,
+    flyTo = function() end,
+    beginTeleportOut = function() end,
+  }
+  local game = { data = {}, save = { inventory = {} }, input = {},
+                 stack = { push = function(_, s) pushed[#pushed + 1] = s end,
+                           top = function() return ow end } }
+  mod.world.game = game
+
+  local feature = load_("modules/QualityOfLife/qol_feature_easy_interactions.lua",
+                        { value = 1 })
+  ok(type(feature) == "table" and type(feature.install) == "function",
+    "the feature loads")
+  feature.install(mod, services)
+
+  ok(type(mod.exports.fieldMenu) == "table"
+     and type(mod.exports.fieldMenu.provide) == "function",
+    "and publishes the SELECT menu registry")
+
+  -- Drive the menu the way SELECT does: through the handler the feature
+  -- installed on OverworldController.
+  local OverworldController = require("src.world.OverworldController")
+  local handlers = rawget(OverworldController, "__qolSelectHandlers") or {}
+  local handler = handlers[mod.id]
+  ok(type(handler) == "function", "and installs the SELECT handler")
+
+  local function openMenu()
+    pushed = {}
+    game.input = { wasPressed = function(_, k) return k == "select" end }
+    if handler then handler(ow) end
+    for _, p in ipairs(pushed) do
+      if type(p) == "table" and type(p.items) == "table" then return p.items end
+    end
+    return nil
+  end
+
+  local function idsOf(items)
+    local out = {}
+    for _, item in ipairs(items or {}) do out[#out + 1] = tostring(item.id) end
+    return table.concat(out, ",")
+  end
+
+  local items = openMenu()
+  ok(items ~= nil, "SELECT opens the menu")
+  eq(idsOf(items), "fly,cancel",
+    "with a row for every field move usable here, each carrying its id")
+
+  -- MAP is off by default and appears when the row is turned on
+  options.qol_select_map = true
+  eq(idsOf(openMenu()), "fly,map,cancel", "MAP ON SELECT adds the town map")
+  options.qol_select_map = false
+  eq(idsOf(openMenu()), "fly,cancel", "and turning it off takes it away again")
+
+  -- indoors there is no map to open, the same reason FLY is outdoors-only
+  options.qol_select_map = true
+  ow.map.def.outside = false
+  local inside = openMenu()
+  ok(inside == nil or not idsOf(inside):find("map", 1, true),
+    "and it is not offered indoors")
+  ow.map.def.outside = true
+  options.qol_select_map = false
+
+  -- another mod's row, and where it lands
+  local remove = mod.exports.fieldMenu.provide(function(_, _, rows)
+    rows[#rows + 1] = { id = "mine", label = "MINE", onSelect = function() end }
+    return rows
+  end, "someone")
+  eq(idsOf(openMenu()), "fly,mine,cancel",
+    "a provider's row lands above CANCEL, which stays the floor")
+  remove()
+  eq(idsOf(openMenu()), "fly,cancel", "and removing the provider takes it away")
+
+  -- a provider that raises is skipped, and the menu still opens
+  mod.exports.fieldMenu.provide(function() error("boom", 0) end, "bad")
+  logged = {}
+  eq(idsOf(openMenu()), "fly,cancel",
+    "a provider that raises does not take the menu down with it")
+  ok(#logged > 0, "and it is said once")
+  local before = #logged
+  openMenu()
+  eq(#logged, before, "once, not on every press")
+
+  for name, value in pairs(realLoaded) do package.loaded[name] = value end
+  if handlers then handlers[mod.id] = nil end
+end
+
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

@@ -70,6 +70,28 @@ local REPEL_PROMPT_SUBFEATURE = {
   },
 }
 
+-- The town map on the SELECT menu, for anyone who would rather look than
+-- walk.  Outdoors only, for the same reason FLY is: it is the overworld's own
+-- map and a basement is not on it.
+--
+-- Off by default.  This row is a convenience rather than a field move, and a
+-- menu that grows a row nobody asked for is worse than one that does not --
+-- the SELECT menu earns its place by being short and by being only what is
+-- usable here.
+local SELECT_MAP_SUBFEATURE = {
+  option = {
+    key = "qol_select_map",
+    label = "MAP ON SELECT",
+    type = "toggle",
+    default = false,
+  },
+  menu = {
+    label = "MAP ON SELECT",
+    key = "qol_select_map",
+    description = "PUTS THE TOWN MAP\nON THE (SELECT)\fMENU, OUTDOORS.",
+  },
+}
+
 local feature = {
   option = {
     key = "qol_easy_interactions",
@@ -109,6 +131,7 @@ local feature = {
     },
     WATER_INTERACTION_SUBFEATURE,
     REPEL_PROMPT_SUBFEATURE,
+    SELECT_MAP_SUBFEATURE,
   },
 }
 
@@ -276,6 +299,76 @@ local function installGen1(mod, services)
       end))
   end
 
+  -- The SELECT menu, and why its rows carry ids
+  --
+  -- This list is built fresh on every press out of what is usable RIGHT NOW:
+  -- FLY only outdoors, FLASH only in the dark, DIG only in a cave, a repel
+  -- only while one is in the bag.  So it is not a menu with a fixed shape --
+  -- it is a question about this tile, this party and this bag, asked again
+  -- every time.
+  --
+  -- That is exactly why every row now carries an `id`.  A label is what the
+  -- row says and changes with the language and with which repel is in the
+  -- bag; an id is what the row IS.  Anything that wants to reorder this list,
+  -- hide a row from it or add one to it needs a name for a row that is not on
+  -- screen at the moment, and the id is that name.
+  --
+  -- And the list is handed round before it is drawn, so this file is no
+  -- longer the only thing allowed an opinion about what is on it.
+  --
+  -- A registry rather than a hook: `mod.hooks` gives a mod `wrap` and no way
+  -- to EMIT one, so a mod cannot open a hook of its own.  The suite already
+  -- has an answer to that -- Gen1Dex publishes `area.provide` the same way --
+  -- and this is that answer for this menu.
+  --
+  --   local qol = mod.find("Gen1WildQOL")           -- or Gen1QualityOfLife
+  --   qol.exports.fieldMenu.provide(function(game, ow, rows)
+  --     rows[#rows + 1] = { id = "mine", label = "MINE", onSelect = ... }
+  --     return rows
+  --   end, mod.id)
+  --
+  -- Handed the rows and hands back the rows; returning nothing leaves them
+  -- alone.  A provider that raises is skipped and said so once -- a menu that
+  -- fails to open because somebody else's row threw is a worse bug than the
+  -- missing row.  Gating is the provider's own business: this only promises
+  -- that what IT put here is usable on this tile, with this party, right now.
+  local providers, providerOrder = {}, {}
+  local providerWarned = {}
+
+  mod.exports.fieldMenu = {
+    provide = function(fn, owner)
+      if type(fn) ~= "function" then return function() end end
+      local key = owner or fn
+      -- tagged by owner so a hot reload REPLACES a provider rather than
+      -- stacking a second one closed over the previous load
+      if providers[key] == nil then providerOrder[#providerOrder + 1] = key end
+      providers[key] = fn
+      return function()
+        providers[key] = nil
+        providerWarned[key] = nil
+      end
+    end,
+  }
+
+  local function runProviders(game, ow, items)
+    for _, key in ipairs(providerOrder) do
+      local fn = providers[key]
+      if fn then
+        local ok, out = pcall(fn, game, ow, items)
+        if not ok then
+          if not providerWarned[key] then
+            providerWarned[key] = true
+            mod.log:warn("a SELECT menu provider raised and was skipped: %s",
+              tostring(out))
+          end
+        elseif type(out) == "table" then
+          items = out
+        end
+      end
+    end
+    return items
+  end
+
   local function openSelectFieldMoves(ow)
     local game = mod.world.game
     local outside = Map.isOutside(ow.map.def,
@@ -283,39 +376,58 @@ local function installGen1(mod, services)
     local items = {}
 
     if outside and ow:partyKnows("FLY") then
-      items[#items + 1] = { label = "FLY", onSelect = function()
+      items[#items + 1] = { id = "fly", label = "FLY", onSelect = function()
         mod.ui.push(game, "TownMap", { fly = true, onFly = function(mapId)
           ow:flyTo(mapId)
         end })
       end }
     end
     if outside and ow:partyKnows("TELEPORT") then
-      items[#items + 1] = { label = "TELEPORT", onSelect = function()
-        ow:beginTeleportOut()
-      end }
+      items[#items + 1] = { id = "teleport", label = "TELEPORT",
+        onSelect = function()
+          ow:beginTeleportOut()
+        end }
     end
     if ow.dark and ow:partyKnows("FLASH") then
-      items[#items + 1] = { label = "FLASH", onSelect = function()
-        useFlash(ow, game)
-      end }
+      items[#items + 1] = { id = "flash", label = "FLASH",
+        onSelect = function()
+          useFlash(ow, game)
+        end }
     end
     if DIG_TILESETS[ow.map.def.tileset] and ow.map.id ~= "AGATHAS_ROOM"
        and ow:partyKnows("DIG") then
-      items[#items + 1] = { label = "DIG", onSelect = function()
+      items[#items + 1] = { id = "dig", label = "DIG", onSelect = function()
         ow:beginTeleportOut()
+      end }
+    end
+    -- The town map, for anyone who would rather look than walk.  Outdoors
+    -- only, for the same reason FLY is: it is the overworld's own map and a
+    -- basement is not on it.  Off by default -- this row is a convenience,
+    -- not a field move, and a menu that grows a row nobody asked for is worse
+    -- than one that does not.
+    if outside and optionValue(game, "qol_select_map") == true then
+      items[#items + 1] = { id = "map", label = "MAP", onSelect = function()
+        mod.ui.push(game, "TownMap", {})
       end }
     end
     -- vanilla lets a repel overwrite an active one, so this stays offered
     -- while repelSteps is still counting down
     local repel = repelItem(game)
     if repel then
-      items[#items + 1] = { label = itemName(game, repel), onSelect = function()
-        useRepel(game, repel)
-      end }
+      items[#items + 1] = { id = "repel", label = itemName(game, repel),
+        onSelect = function()
+          useRepel(game, repel)
+        end }
     end
+
+    -- Everyone else's turn.  Before the CANCEL row is added, so a mod that
+    -- appends lands above it rather than under the way out; CANCEL is the
+    -- floor of this menu and stays the floor.
+    items = runProviders(game, ow, items)
+
     if #items == 0 then return false end
 
-    items[#items + 1] = { label = "CANCEL" }
+    items[#items + 1] = { id = "cancel", label = "CANCEL" }
     pushBottomMenu(game, items)
     return true
   end

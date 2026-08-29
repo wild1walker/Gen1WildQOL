@@ -86,6 +86,45 @@ already installed. Features that do have one — SPRINT, AUTO SAVE, AUTO
 CONTINUE, ALL 151, AREA BANNER, CAUGHT MARKER and EASY HM USE
 — switch live.
 
+## The SELECT menu is a list other mods can join
+
+`EASY HM USE` puts a field-move menu on `SELECT`: `FLY`, `TELEPORT`, `FLASH`,
+`DIG`, a repel. It is built fresh on every press out of what is usable *right
+now* — `FLY` only outdoors, `FLASH` only in the dark, a repel only while one is
+in the bag — so it is not a menu with a fixed shape. It is a question about
+this tile, this party and this bag, asked again every time.
+
+Two things follow from that.
+
+**Every row carries an `id`.** A label is what a row says and moves with the
+language and with which repel is in the bag; an id is what the row *is*, and
+anything that wants to reorder the list, hide a row or add one needs a name for
+a row that is not on screen at the moment.
+
+**And the list is handed round before it is drawn.**
+
+```lua
+local qol = mod.find("Gen1WildQOL")
+qol.exports.fieldMenu.provide(function(game, ow, rows)
+  rows[#rows + 1] = { id = "mine", label = "MINE", onSelect = ... }
+  return rows
+end, mod.id)
+```
+
+A registry rather than a hook, because `mod.hooks` gives a mod `wrap` and no
+way to *emit* one of its own — Gen1Dex's `area.provide` is the same answer to
+the same problem. The provider is handed the rows and hands back the rows;
+returning nothing leaves them alone, and it is tagged by owner so a hot reload
+replaces it rather than stacking a second copy.
+
+Rows land above `CANCEL`, which stays the floor of the menu. A provider that
+raises is skipped and said so once: a menu that fails to open because somebody
+else's row threw is a worse bug than a missing row. Gating is the provider's
+own business — this only promises that what *it* put there is usable here.
+
+`MAP ON SELECT` is the first row built on that: the town map, outdoors, off by
+default.
+
 ## What is different from the standalone mods
 
 - **EXP SHARE defaults to GEN 5+.** The fighters keep their full experience and
