@@ -35,6 +35,7 @@ return function(mod)
   local GC_STEPS = 12       -- ceiling: a cycle on a game-sized heap, no more
   local UPLOAD_GAP = 300    -- least time between two autosave-woken uploads
   local SYNC_HOLD_MAX = 3   -- longest a mid-step frame may hold a sync cycle
+  local LOAD_WAIT = 45      -- longest a due save waits for a loading screen
 
   local BOX_W, BOX_H = 20, 3
   local ICON_W, ICON_H = 7, 3
@@ -69,6 +70,7 @@ return function(mod)
     lastUploadAt = -math.huge,
     syncWasBusy = false,
     syncHeld = 0,
+    dueAt = nil,
     notify = 0,
     heldTold = false,
     heldSince = nil,
@@ -127,6 +129,14 @@ return function(mod)
       label = "HEAL CONFLICTS",
       default = true,
       help = "Answer a sync conflict with your own older upload on both sides.",
+      visible_if = { key = "enabled", equals = true },
+    },
+    {
+      key = "on_load",
+      type = "toggle",
+      label = "SAVE ON LOADS",
+      default = true,
+      help = "Write during the screen a warp or a battle already blacks out.",
       visible_if = { key = "enabled", equals = true },
     },
     {
@@ -636,6 +646,7 @@ return function(mod)
       state.elapsed = 0
       state.dirty = false
       state.due = false
+      state.dueAt = nil
       state.lastWriteAt = state.clock
       paceUpload(game)
       settleGarbage()
@@ -652,7 +663,50 @@ return function(mod)
 
   local function request()
     if not on() then return end
+    if not state.due then state.dueAt = state.clock end
     state.due = true
+  end
+
+  -- ---------- writing on a loading screen
+  --
+  -- The write itself is not the expensive part -- the collector catching up on
+  -- what it threw away is, and settleGarbage pays that in the same frame.  What
+  -- makes it FELT is where that frame lands.  On the route it is a stutter in
+  -- the middle of walking, which is the one place a dropped frame shows.
+  --
+  -- The game already blacks the screen out twice for its own reasons: a warp
+  -- fades out, swaps the map and fades back, and a battle ends behind a hold
+  -- and a fade.  Nobody can see a frame during either.  So a save that is due
+  -- waits for one and goes there, and the cost is spent on a screen the player
+  -- was already waiting through -- the loading screen is a few frames longer
+  -- and nothing else changes.
+  --
+  -- map.entered rather than map.exited: exited fires at the top of setMap,
+  -- before the new map is loaded, so a save written there records the map you
+  -- just left and the position you left it from.  entered fires once the new
+  -- map, the player's cell and the facing are all in place, and the transition
+  -- is still up -- coherent state, screen still covered.
+  --
+  -- The overworld is NOT idle at either moment: the transition owns the top of
+  -- the stack and the player has just been placed.  overworldIdle would refuse
+  -- every one of these, so the load path asks the questions that still matter
+  -- -- nothing in flight, sync settled -- and skips the one that is only there
+  -- to keep a write off a moving player.
+  local function loadScreenWrite(game, why)
+    if not game then return end
+    if not on() then return end
+    if mod.options:get("on_load") == false then return end
+    if state.quit or state.pendingRestore then return end
+    if not (state.due and state.dirty) then return end
+    if state.clock - state.lastWriteAt < MIN_GAP then return end
+    local ow = game and game.overworld
+    if ow and ow.player and ow.player.moving then return end
+    if ow and ow.runner and ow.runner.isRunning and ow.runner:isRunning() then
+      return
+    end
+    if not syncSettled(game) then return end
+    mod.log:info("autosave on a %s screen", tostring(why))
+    write(game)
   end
 
   -- ---------- what counts as progress
@@ -690,6 +744,16 @@ return function(mod)
   mod.events:on("battle.started", function() state.inBattle = true end)
   mod.events:on("battle.ended", function() state.inBattle = false end)
 
+  -- The two screens the game blacks out on its own.  Both fire while their
+  -- transition is still up, so the write lands under it: a warp once the new
+  -- map is in place, and a battle in the return hold before the fade back.
+  mod.events:on("map.entered", function()
+    loadScreenWrite(state.game, "warp")
+  end)
+  mod.events:on("battle.ended", function()
+    loadScreenWrite(state.game, "battle")
+  end)
+
   -- A manual save resets everything: the player just did the thing.  It is
   -- otherwise none of this mod's business -- writeSave notifies the sync
   -- engine itself, whoever called it.
@@ -697,6 +761,7 @@ return function(mod)
     state.elapsed = 0
     state.dirty = false
     state.due = false
+    state.dueAt = nil
     state.lastWriteAt = state.clock
     -- A manual save wakes the sync engine exactly the way ours does, and its
     -- upload does the same planning work.  Count it: the next autosave has
@@ -1358,6 +1423,18 @@ return function(mod)
     -- at all.  MIN_GAP alone still caps a burst at one write per 20 seconds,
     -- which is the hammering the second floor was really there to stop.
     if state.clock - state.lastWriteAt < MIN_GAP then return end
+
+    -- Give a loading screen first refusal.  A save that has only just come due
+    -- waits, because a warp or a battle is usually seconds away and the cost
+    -- is invisible on either.  LOAD_WAIT is the point at which waiting is worse
+    -- than being seen: a player who has not changed maps or fought anything in
+    -- three quarters of a minute is standing somewhere quiet, and a save on the
+    -- route is better than no save at all.
+    if mod.options:get("on_load") ~= false and state.dueAt
+       and state.clock - state.dueAt < LOAD_WAIT then
+      return
+    end
+
     if not overworldIdle(game) then return end
     local settled, why = syncSettled(game)
     if not settled then

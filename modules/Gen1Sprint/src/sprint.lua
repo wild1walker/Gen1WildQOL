@@ -67,8 +67,40 @@ function Sprint.wouldActOn(cfg)
   return cfg.sprint or cfg.bikeMult ~= 1
 end
 
+-- Whether a SCRIPT is walking the player rather than the player walking.
+--
+-- Sprinting is a thing you do by pressing a direction.  A cutscene walk is not
+-- that: the escort out of Pallet Town, a warp's step through a door, a trainer
+-- marching you into place.  The engine drives those through scriptMoves and
+-- asks stepLength for their duration exactly as it does for a real step, so
+-- without this a held B shortened them too.
+--
+-- Which was not just unfaithful, it desynchronised the one cutscene that
+-- reads the player's live speed.  story2.lua's Oak escort pins his walk to
+-- yours once, at the top -- `oak.stepFrames = ow.player.stepFramesCur` -- and
+-- then drives the pair off the PLAYER's completion.  Sprint made that number
+-- input-dependent, so Oak could be left running at double the speed the
+-- player was actually walking: he finished each step in half the time and
+-- then stood waiting for you.  Step, pause, step, pause, the whole way to the
+-- lab.
+--
+-- Asked through mod.world, which is the supported way to reach the live
+-- overworld, and answered false whenever there is no overworld to ask -- the
+-- title screen, a battle, a stub in a test.  Only the PLAYER's own scripted
+-- moves count: an NPC walking somewhere else on the map is not this.
+local function scriptWalking(world, player)
+  if not (world and player) then return false end
+  local ok, ow = pcall(function() return world:overworld() end)
+  if not ok or type(ow) ~= "table" then return false end
+  for _, mv in ipairs(ow.scriptMoves or {}) do
+    if mv.entity == player then return true end
+  end
+  return false
+end
+
 -- `read` is a zero-argument function returning the current snapshot.
-function Sprint.newWrapper(read)
+-- `world` is mod.world, or nil where there is none to ask.
+function Sprint.newWrapper(read, world)
   return function(next, frames, ctx)
     -- Whatever this hands `next` REPLACES the argument list for the whole
     -- rest of the chain (src/mods/Hooks.lua nextFn), so ctx is passed along
@@ -86,6 +118,9 @@ function Sprint.newWrapper(read)
     -- frames vanilla does.
     local player = ctx.player
     if player and player.ledgeHop then return next(frames, ctx) end
+
+    -- a script is walking you: this step is the game's, not yours
+    if scriptWalking(world, player) then return next(frames, ctx) end
 
     local cfg = read()
     local out = frames
@@ -129,7 +164,7 @@ function Sprint.install(mod, opt, multipliers)
     return cached
   end
 
-  local wrapper = Sprint.newWrapper(read)
+  local wrapper = Sprint.newWrapper(read, mod.world)
   local unwrap = nil
 
   -- A mod with nothing to say leaves the chain rather than short-circuiting
