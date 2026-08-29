@@ -333,20 +333,65 @@ local function installGen1(mod, services)
   -- missing row.  Gating is the provider's own business: this only promises
   -- that what IT put here is usable on this tile, with this party, right now.
   local providers, providerOrder = {}, {}
-  local providerWarned = {}
+  local providerWarned, providerCatalog = {}, {}
+
+  -- Every row this menu can EVER show, whether or not it can right now.
+  --
+  -- The live list is the answer to "what is usable on this tile"; this is the
+  -- answer to "what is this menu made of".  They are different questions and
+  -- the second one has no other source: a menu built per press is invisible to
+  -- anything that wants to arrange it until the exact moment it happens to
+  -- contain the row being arranged, which for FLY means standing outdoors with
+  -- FLY in the party while holding the editor open.
+  --
+  -- So the catalog is published beside the registry, and a mod that adds rows
+  -- declares its own alongside its provider.  Labels here are the plain name
+  -- of the thing; the live row may read differently -- the repel row is
+  -- SUPER REPEL or MAX REPEL depending on the bag -- and that is why both are
+  -- keyed by id rather than by label.
+  local CATALOG = {
+    { id = "fly", label = "FLY" },
+    { id = "teleport", label = "TELEPORT" },
+    { id = "flash", label = "FLASH" },
+    { id = "dig", label = "DIG" },
+    { id = "map", label = "MAP" },
+    { id = "repel", label = "REPEL" },
+    { id = "cancel", label = "CANCEL" },
+  }
 
   mod.exports.fieldMenu = {
-    provide = function(fn, owner)
+    -- fn(game, ow, rows) -> rows.  `entries` optionally declares the rows this
+    -- provider can contribute -- { { id = ..., label = ... }, ... } -- so they
+    -- can be arranged before they have ever been on screen.
+    provide = function(fn, owner, entries)
       if type(fn) ~= "function" then return function() end end
       local key = owner or fn
       -- tagged by owner so a hot reload REPLACES a provider rather than
       -- stacking a second one closed over the previous load
       if providers[key] == nil then providerOrder[#providerOrder + 1] = key end
       providers[key] = fn
+      providerCatalog[key] = type(entries) == "table" and entries or nil
       return function()
         providers[key] = nil
         providerWarned[key] = nil
+        providerCatalog[key] = nil
       end
+    end,
+
+    catalog = function()
+      local out = {}
+      for _, entry in ipairs(CATALOG) do
+        out[#out + 1] = { id = entry.id, label = entry.label }
+      end
+      for _, key in ipairs(providerOrder) do
+        for _, entry in ipairs(providerCatalog[key] or {}) do
+          if type(entry) == "table" and type(entry.id) == "string" then
+            out[#out + 1] = { id = entry.id,
+                              label = entry.label or entry.id }
+          end
+        end
+      end
+      return out
     end,
   }
 
