@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.14.1
+
+**The stutter at an autosave is gone** (Gen1AutoSave 1.10.0), and it was the
+mod's own doing rather than the engine's.
+
+Not the write — the collector burst fired straight after one. `AUTO SAVE` ran
+up to 12 collector steps of 4096 KB, which is up to **48 MB** of allocation
+credit: on any heap this game has, that is a complete collection cycle, in one
+frame, after every single save.
+
+Measured under LuaJIT on a 45 MB heap, 30 save cycles with twenty seconds of
+ordinary frames between them — median frame the save lands in:
+
+| | save frame |
+| --- | --- |
+| 12 × step 4096 (what it was) | **53.0 ms** |
+| no nudge at all | 14.3 ms |
+| 2 × step 512 (what it is now) | **10.5 ms** |
+
+And it bought almost nothing: the worst frame in the twenty seconds *after* a
+save is 4.1 ms with the burst, 5.9 ms with the small nudge. Forty milliseconds
+a save, spent to move at most six off some later frame — and on a phone every
+number is three to five times larger.
+
+The premise was wrong, and the engine says so in its own source: `Game:update`
+already ends on `collectgarbage("step", 1)` every rendered frame, precisely so
+the collector never batches into a visible pause. What a save needs is a little
+extra credit for one unusually hungry frame, not a cycle's worth.
+
+Also measured and documented rather than changed: `SAVE BACKUPS` roughly
+triples what a save costs. It is off by default, and its help row says so now.
+
 ## 1.14.0
 
 **`AUTO SAVE` saves in the moments you could not move anyway** (Gen1AutoSave
