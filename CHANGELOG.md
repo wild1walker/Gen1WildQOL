@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.18.0
+
+**The autosave goes at the start of the door's fade, not the end of it**
+(Gen1AutoSave 1.14.0). The black screen plays out now.
+
+`map.entered` is the *end* of a warp's animation. The fade to black has already
+played by the time it fires, and the fade back is zero steps long -- the map
+simply appears. So the write had the whole cost of a save in front of it and no
+animation left to hide under, and what you saw was the door popping you
+through. Two rounds of clamping the frame afterwards could not fix that,
+because there was nothing left after it to clamp.
+
+The first frames of the same black screen are on the other side of it, with all
+thirty-two steps of the fade still to come. The write goes there instead: the
+oversized frame is absorbed as one logic step, and the palette then walks down
+to black one step per drawn frame. **The black screen is longer by exactly what
+the write cost. The animation is not.** `map.entered` stays as the fallback for
+a warp whose fade was never writable -- inside the minimum gap, a sync
+mid-answer, a script still running -- and records the far side instead.
+
+And the gate the *ordinary* due save goes through had the same ordering bug
+that was fixed a version ago in its twin: it asked "is something over the
+overworld?" before it asked "is that something a transition?", and a transition
+is something over the overworld. So a save that was merely due could land in
+the middle of a fade as well.
+
 ## 1.17.1
 
 **The black screen plays out when you walk through a door** (Gen1AutoSave
