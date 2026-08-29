@@ -323,8 +323,15 @@ return function(mod)
     if state.inBattle then return false end
     if scriptRunning(ow) then return false end
     if ow.engaging or ow.emote then return false end
-    if screenOver(game) then return true end
+    -- Ahead of screenOver, for the reason quietFrame gives above: a
+    -- transition IS a screen over the overworld, so the line below was
+    -- answering yes for the one frame this mod most needs to answer no for.
+    -- The ordinary due-save path could therefore write in the middle of a
+    -- warp's fade, which is the animation being cut rather than covered.  A
+    -- write that WANTS to be under the black screen does not come through
+    -- here; it comes through loadScreenWrite, which decides for itself.
     if ow.transitioning or ow.teleportOut then return false end
+    if screenOver(game) then return true end
     if ow.player.moving then return false end
     if walking(game, ow) then return false end
     if state.stillFor >= STILL_FOR then return true end
@@ -1037,6 +1044,48 @@ return function(mod)
     if mod.options:get("events") then request() end
     loadScreenWrite(state.game, "warp")
   end)
+
+  -- ---------- before the fade, not after it
+  --
+  -- map.entered is the END of a warp's animation, not the start of it: the
+  -- fade to black has already played by the time it fires, and the fade back
+  -- is zero steps long -- the map simply appears.  So a write there had the
+  -- whole cost of a save and nothing left in front of it to hide under, and
+  -- what the player saw was the door popping them through.
+  --
+  -- The first frames of the transition are the other side of the same black
+  -- screen and there are thirty-two of them.  Writing there puts the entire
+  -- fade AFTER the hitch: absorbHitch clamps the oversized frame back to one
+  -- logic step, and the palette then walks down to black one step per drawn
+  -- frame the way it is meant to.  The black screen is longer by what the
+  -- write cost.  That is the trade -- a slightly longer loading screen for an
+  -- animation that plays -- and it is the one the player asked for.
+  --
+  -- Tried on every frame of the transition rather than only its first,
+  -- because the first is the one the player may still be mid-stride on and
+  -- loadScreenWrite rightly refuses those.  Once it writes, `due` clears and
+  -- every later frame falls out of loadScreenWrite's second line, so this is
+  -- a table lookup for the rest of the fade.
+  --
+  -- The state written is the doorway being left: a tile and a facing the
+  -- player chose, on a map they know. map.entered stays as the fallback for a
+  -- warp whose fade was never writable -- MIN_GAP, a sync mid-answer, a
+  -- script still running -- and records the far side instead.
+  local function writeUnderTheFade(game)
+    local ow = game and game.overworld
+    if not (ow and ow.player) then
+      state.fading = false
+      return
+    end
+    local fading = (ow.transitioning or ow.teleportOut) and true or false
+    if fading and not state.fading and mod.options:get("events") then
+      -- The door is the checkpoint, and this is the door.
+      request()
+    end
+    state.fading = fading
+    if not fading then return end
+    loadScreenWrite(game, "warp fade")
+  end
   mod.events:on("battle.ended", function()
     loadScreenWrite(state.game, "battle")
   end)
@@ -1062,6 +1111,7 @@ return function(mod)
     state.heldSince = nil
     state.held = false
     state.healKey, state.healTries = nil, 0
+    state.fading = false
     state.lastWriteAt = state.clock
   end
 
@@ -1678,6 +1728,13 @@ return function(mod)
       stepRestore(game)
       return
     end
+
+    -- The black screen a warp puts up is the best frame this mod gets, and
+    -- its first frames are better than its last: everything after them is
+    -- animation, and animation is what absorbs the write.  Ahead of the
+    -- interval below because this is a window, not a clock -- it lasts thirty
+    -- two steps and then it is gone.
+    writeUnderTheFade(game)
 
     -- Time accrues wherever the player is.  A long gym battle counts toward
     -- the interval, so "5 MIN" means five minutes of playing rather than five
