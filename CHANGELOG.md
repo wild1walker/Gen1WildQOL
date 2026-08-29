@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.13.2
+
+**The stutter a few seconds *after* a save is gone too** (Gen1AutoSave 1.8.0).
+1.13.1 stopped writing a save into a stride, and that held — but the write is
+the cheap half. The expensive half is the sync cycle the write wakes, which
+arrives a few seconds later on network time and decodes every save slot of
+every game version through a character-at-a-time parser.
+
+`QUIET SYNC` has held that out of walking frames since it was added, and it was
+leaking through the same two holes the write had. Its idle test read the
+player's `moving` flag, which drops for the single frame between two strides —
+so walking a long route without stopping offered it an opening several times a
+second. And the hold was capped at three seconds, which counted to three
+without checking that you had stopped and then ran the plan wherever it landed.
+Between the two, the stall a moment after every save was not an edge case, it
+was the ordinary path.
+
+A held direction counts as walking now, and the cap is gone: the reply is
+already in hand, the engine's clock stops with the hold, and letting go of the
+pad releases it on the next frame. Any menu, text box, battle or doorway
+releases it immediately too. The collector's debt after a cycle waits for the
+same kind of frame, since the transfer that follows the plan finishes on
+network time and answers to nothing.
+
 ## 1.13.1
 
 **`AUTO SAVE` never writes into a stride now** (Gen1AutoSave 1.7.0). 1.13.0

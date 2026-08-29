@@ -6,6 +6,9 @@
 --   * a save that comes due while you are walking is never written into the
 --     stride: it waits for a warp's black screen, the end of a battle, or for
 --     you to stop, so the frame it costs is one nobody is looking at
+--   * and neither is the sync cycle the write wakes, which is the expensive
+--     half and lands seconds later on network time: the plan, and the
+--     collector's debt after it, wait for the same kind of frame
 --   * the timer runs during battles and menus, not only while you stand still
 --     on the map -- the write itself still waits for a settled overworld
 --   * nothing happened since the last write => no write, so idling on the map
@@ -37,7 +40,6 @@ return function(mod)
   local GC_STEP = 4096      -- collector work per step, in KB of allocation
   local GC_STEPS = 12       -- ceiling: a cycle on a game-sized heap, no more
   local UPLOAD_GAP = 300    -- least time between two autosave-woken uploads
-  local SYNC_HOLD_MAX = 3   -- longest a mid-step frame may hold a sync cycle
 
   local BOX_W, BOX_H = 20, 3
   local ICON_W, ICON_H = 7, 3
@@ -71,7 +73,7 @@ return function(mod)
     syncWaitUntil = 0,
     lastUploadAt = -math.huge,
     syncWasBusy = false,
-    syncHeld = 0,
+    gcOwed = false,
     notify = 0,
     heldTold = false,
     heldSince = nil,
@@ -145,7 +147,7 @@ return function(mod)
       type = "toggle",
       label = "QUIET SYNC",
       default = true,
-      help = "Hold a sync cycle out of the frames you are mid-step in.",
+      help = "Hold a sync cycle out of the frames you are walking through.",
       visible_if = { key = "enabled", equals = true },
     },
     {
@@ -245,6 +247,22 @@ return function(mod)
       return false
     end
     return true
+  end
+
+  -- Is the screen moving?  The sibling of overworldIdle: that one decides
+  -- whether a frame is worth writing a save in, this one whether it is worth
+  -- running a sync plan or a collector step in, and both mean the same thing
+  -- by it.  A held direction counts, for the reason spelled out at
+  -- holdSyncWhileWalking: `player.moving` drops for the single frame between
+  -- two strides, and that frame is the stutter.
+  local function midStride(game)
+    local ow = game and game.overworld
+    if not (ow and ow.player) then return false end
+    if game.stack and game.stack.top and game.stack:top() ~= ow then
+      return false
+    end
+    if ow.player.moving then return true end
+    return walking(game, ow)
   end
 
   -- Everything sync is asked goes through pcall: a host with sync compiled
@@ -526,6 +544,14 @@ return function(mod)
   -- Every cycle, not only the ones an autosave woke: the engine's own sweep,
   -- a download, a conflict being resolved all decode the same slots, and
   -- after pacing most cycles are the engine's rather than ours.
+  --
+  -- And it waits for a frame worth spending, the same as everything else here.
+  -- A cycle can finish on a frame the player is walking through -- the plan is
+  -- held out of those, but the transfer that follows it completes on network
+  -- time and answers to nothing -- and twelve collector steps landing there is
+  -- the same stutter by another route.  So the debt is remembered and paid on
+  -- the first frame that is not a moving screen, which is at worst a fraction
+  -- of a second later.
   local function settleSyncGarbage(game)
     local engine = syncEngineOf(game)
     if not engine then
@@ -536,8 +562,13 @@ return function(mod)
       state.syncWasBusy = true
       return
     end
-    if not state.syncWasBusy then return end
-    state.syncWasBusy = false
+    if state.syncWasBusy then
+      state.syncWasBusy = false
+      state.gcOwed = true
+    end
+    if not state.gcOwed then return end
+    if midStride(game) then return end
+    state.gcOwed = false
     settleGarbage()
   end
 
@@ -571,17 +602,29 @@ return function(mod)
   --
   -- Only when a reply is actually in flight.  A tick with nothing pending is
   -- the cheap one that STARTS a cycle, and holding that would stop the clock
-  -- for no reason.  And held for at most SYNC_HOLD_MAX, so a player holding a
-  -- direction across Route 21 cannot starve sync -- after that it runs
-  -- wherever it lands, the way it always did.
-  local function midStride(game)
-    local ow = game and game.overworld
-    if not (ow and ow.player) then return false end
-    if game.stack and game.stack.top and game.stack:top() ~= ow then
-      return false
-    end
-    return ow.player.moving and true or false
-  end
+  -- for no reason.
+  --
+  -- "Mid-step" is the same question overworldIdle asks about the write, and it
+  -- has to be asked the same way, for the same reason.  This used to read
+  -- `player.moving` alone, which drops for the one frame between two strides:
+  -- a player walking a long route without stopping offered this test an
+  -- opening several times a second, and the plan took it.  So the hold was
+  -- released into the exact frame it exists to protect.
+  --
+  -- And there is no cap on the hold now.  There was one -- three seconds, on
+  -- the reasoning that a player crossing Route 21 without letting go must not
+  -- starve sync -- and it did not check that they had stopped either: it
+  -- counted to three and then ran the plan wherever it landed.  Between the
+  -- two, the stall the player reported a moment after every save was not an
+  -- edge case, it was the ordinary path.
+  --
+  -- Holding costs nothing but time.  The reply is already in hand, the engine's
+  -- own clock stops with the hold so nothing fires early to make the time back,
+  -- and the same three doors that release a due save release this: a warp, a
+  -- battle, or the player standing still.  Any menu, text box or doorway takes
+  -- the overworld off the top of the stack and releases it immediately too.
+  -- (midStride is defined next to `walking` above, because settleSyncGarbage
+  -- asks it too.)
 
   local function holdSyncWhileWalking(game)
     local engine = syncEngineOf(game)
@@ -593,13 +636,8 @@ return function(mod)
       local hold = on()
         and mod.options:get("quiet_sync") ~= false
         and self.pending
-        and state.syncHeld < SYNC_HOLD_MAX
         and midStride(state.game)
-      if hold then
-        state.syncHeld = state.syncHeld + (tonumber(dt) or 0)
-        return
-      end
-      state.syncHeld = 0
+      if hold then return end
       return update(self, dt)
     end
   end
