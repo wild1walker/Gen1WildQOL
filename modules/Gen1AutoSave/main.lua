@@ -11,6 +11,9 @@
 --   * and the sync cycle the write wakes, which is the expensive half and
 --     lands seconds later on network time, waits for the NEXT one of those
 --     rather than for the same one: two errands, two windows
+--   * the collector is NUDGED after a write, not run.  A save allocates about
+--     2.8MB; this used to hand the collector 48MB of credit to pay that off,
+--     which is a whole cycle in one frame and was itself the stutter
 --   * the timer runs during battles and menus, not only while you stand still
 --     on the map -- the write itself still waits for a settled overworld
 --   * nothing happened since the last write => no write, so idling on the map
@@ -42,8 +45,9 @@ return function(mod)
   local HOLD_GRACE = 15     -- a conflict has to stand this long to be said
   local HEAL_TRIES = 3      -- give up healing one key after this many goes
   local NOTIFY_TIME = 1.6
-  local GC_STEP = 4096      -- collector work per step, in KB of allocation
-  local GC_STEPS = 12       -- ceiling: a cycle on a game-sized heap, no more
+  local GC_STEP = 512       -- collector work per step, in KB of allocation
+  local GC_STEPS = 2        -- and no more than this, so the nudge can never
+                            -- become a whole collection cycle
   local UPLOAD_GAP = 300    -- least time between two autosave-woken uploads
 
   local BOX_W, BOX_H = 20, 3
@@ -177,7 +181,7 @@ return function(mod)
       type = "toggle",
       label = "SAVE BACKUPS",
       default = false,
-      help = "Keep rollback copies of recent autosaves. START menu: BACKUPS.",
+      help = "Rollback copies in the START menu. Roughly triples a save's cost.",
       visible_if = { key = "enabled", equals = true },
     },
     {
@@ -529,28 +533,40 @@ return function(mod)
   -- to make the .bak, then writes that string twice more -- and rewrites
   -- options.lua alongside it.  With backups on, the checkpoint deep-copies
   -- the save twice on top of that and mod storage serializes the result
-  -- again.  Megabytes of short-lived strings and tables, all in one frame.
+  -- again.  Megabytes of short-lived strings and tables, all in one frame:
+  -- measured, one encode of a 182 KB save allocates about 2.8 MB.
   --
-  -- The engine's collector budget is one small step per rendered frame
-  -- (Game:update ends on collectgarbage("step", 1)), and its own comment says
-  -- what that step is for: "ordinary Lua-heap garbage (per-frame tables and
-  -- closures)", spread out "so the default lazy schedule never batches it
-  -- into a visible pause".  A save is a year of per-frame garbage at once.
-  -- The collector falls behind, and the part of a cycle that cannot be split
-  -- -- finishing the mark -- surfaces a second or two later, in a frame that
-  -- is just ordinary walking.
+  -- SO NUDGE THE COLLECTOR, DO NOT RUN IT.  This was 12 steps of 4096 KB --
+  -- up to 48 MB of allocation credit, which on any heap smaller than that is
+  -- a COMPLETE collection cycle, fired after every single write.  It was
+  -- written to keep the cycle's tail off the route afterwards, and it did
+  -- that; what it also did was buy the tail with a spike four times bigger
+  -- than the save it was attached to.
   --
-  -- So finish the cycle here, in the frame that already stopped to touch the
-  -- disk and is putting a save indicator on screen while it does.  The work
-  -- is the same work; paying for it at the save costs a frame the player has
-  -- been told to expect, instead of a slow patch of route afterwards they
-  -- haven't.
+  -- Measured on a 45 MB heap, LuaJIT, 30 save cycles with 20 s of ordinary
+  -- frames between them -- median frame the save lands in:
   --
-  -- Bounded, because a large heap on a phone must not turn one hitch into a
-  -- freeze: a fixed number of steps, and stop early the moment a step reports
-  -- the cycle finished.  The step argument is kilobytes of allocation for the
-  -- collector to account for, which is how LuaJIT (the host) and 5.4 (the
-  -- test harness) both read it.
+  --     12 x step 4096  (what this was)   53.0 ms
+  --     no nudge at all                   14.3 ms
+  --     2 x step 512    (what this is)    10.5 ms
+  --
+  -- and the frames afterwards are the same either way: the worst frame in the
+  -- twenty seconds following a save is 4.1 ms with the old burst, 5.9 ms with
+  -- this, 10.2 ms with no nudge at all.  The burst was paying 40 ms a save to
+  -- move at most 6 ms off a later frame.  On a phone every one of those
+  -- numbers is three to five times larger, which is what "the game stutters
+  -- every time it autosaves" was.
+  --
+  -- The reason the small nudge is enough is that the engine is ALREADY doing
+  -- this: Game:update ends on collectgarbage("step", 1) every rendered frame,
+  -- and its own comment says why -- to spread collection out "so the default
+  -- lazy schedule never batches it into a visible pause".  The collector was
+  -- never being left behind.  This adds a little credit for the one frame
+  -- that allocated far more than a frame usually does, and nothing more.
+  --
+  -- Stop early the moment a step reports the cycle finished.  The step
+  -- argument is kilobytes of allocation for the collector to account for,
+  -- which is how LuaJIT (the host) and 5.4 (the test harness) both read it.
   local function settleGarbage()
     if type(collectgarbage) ~= "function" then return end
     for _ = 1, GC_STEPS do
