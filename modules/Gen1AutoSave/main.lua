@@ -317,6 +317,28 @@ return function(mod)
   --     there can put a player back into a half-finished cutscene.  The
   --     moment it ENDS is a window -- SETTLE_GRACE below -- and by then the
   --     script is done and the player is standing where it left them.
+  --
+  -- AND A MENU IS NOT A WINDOW.
+  --
+  -- It used to be the widest one this had: anything over the overworld -- the
+  -- START menu, the bag, the party, a PC, a mart, a Centre's heal, a text box
+  -- while somebody talks -- on the reasoning that the player COULD not move
+  -- and the map behind is a still picture, so a dropped frame there is a
+  -- frame nobody sees.
+  --
+  -- Nobody sees it.  They feel it.  A menu is not a pause in the playing, it
+  -- is the part of the playing with the most presses per second in it:
+  -- choosing an item, swapping two moves, walking a cursor down a box list.
+  -- A frame lost there is an input lost there, which is worse than a frame
+  -- lost on a route -- a stutter mid-stride is ugly, a swallowed A press is
+  -- the game not listening.  "The screen is not moving" was the wrong
+  -- question; the right one is whether the player is in the middle of doing
+  -- something, and in a menu they always are.
+  --
+  -- So the doors are the three the README always named: a warp, the end of a
+  -- battle, and the player actually stopping.  The moment a menu CLOSES is
+  -- still one of them -- that is SETTLE_GRACE, and by then the menu is gone
+  -- and they are standing on the route with nothing pressed.
   local function writeWindow(game)
     local ow = game and game.overworld
     if not (ow and ow.player) then return false end
@@ -331,7 +353,11 @@ return function(mod)
     -- write that WANTS to be under the black screen does not come through
     -- here; it comes through loadScreenWrite, which decides for itself.
     if ow.transitioning or ow.teleportOut then return false end
-    if screenOver(game) then return true end
+    -- A screen over the overworld is a REFUSAL here, not a window.  A write
+    -- that wants to go under one the player cannot press through -- a warp's
+    -- black screen, a battle's return hold -- comes through loadScreenWrite,
+    -- which names its own moments rather than taking every screen there is.
+    if screenOver(game) then return false end
     if ow.player.moving then return false end
     if walking(game, ow) then return false end
     if state.stillFor >= STILL_FOR then return true end

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.19.0
+
+**`AUTO SAVE` no longer writes while a menu is up** (Gen1AutoSave 1.15.0).
+
+The widest window it had was anything over the overworld: a text box while
+somebody talks, the START menu, the bag, the party, a PC, a mart, a Centre's
+heal. The reasoning was that you cannot move under one and the map behind is a
+still picture, so a dropped frame there is a frame nobody sees.
+
+Nobody sees it. You feel it. A menu is not a pause in the playing — it is the
+part with the most presses per second in it, and a frame lost there is an
+*input* lost there. A stutter mid-stride is ugly; a swallowed `A` press is the
+game not listening.
+
+So a screen over the overworld is a refusal now, and the doors are the three
+they always were: a warp, the end of a battle, and actually stopping. The
+moment a menu *closes* is still one of them — by then it is gone and you are
+standing on the route with nothing pressed. Closing is the moment, not opening.
+
+Writes that go under a screen you cannot press through — a warp's black screen,
+a battle's return hold — are unaffected.
+
 ## 1.18.0
 
 **The autosave goes at the start of the door's fade, not the end of it**
