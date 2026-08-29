@@ -1016,13 +1016,22 @@ return function(mod)
     end)
   end
 
+  -- Going IN is not a window.  It reads like one -- the intro wipe is as
+  -- covered a screen as the game has -- but it is the only "covered screen"
+  -- in the game that the player is watching for a cue rather than waiting
+  -- out: the wipe closes and the first thing that happens is a menu they are
+  -- already reaching for.  A hitch there is felt as the battle being slow to
+  -- start, every single encounter, which is the most frequent transition in
+  -- the game.  Reported as stuttering going into battles, and it was.
+  --
+  -- Nothing is lost by dropping it.  The state it wrote was the overworld the
+  -- battle started from, and the end of the battle -- a few seconds later,
+  -- behind a longer screen nobody is waiting on -- writes the same route with
+  -- the battle's outcome in it as well.  The save that write would have made
+  -- is strictly worse than the one that follows it.
   mod.events:on("battle.started", function()
-    -- Before the flag: this write is about the overworld the battle started
-    -- from, and it goes down behind the battle's own intro, which is as
-    -- covered a screen as the game has.  After the flag, writeWindow would
-    -- refuse it and rightly so.
-    loadScreenWrite(state.game, "battle start")
     state.inBattle = true
+    state.returnArmed = 0
   end)
   mod.events:on("battle.ended", function() state.inBattle = false end)
 
@@ -1112,8 +1121,66 @@ return function(mod)
     if not fading then return end
     loadScreenWrite(game, "warp fade")
   end
+  -- ---------- the battle's way out, one frame later than it used to be
+  --
+  -- battle.ended fires in a gap.  BattleState:finish pops the battle screen,
+  -- emits, and only THEN pushes the return transition
+  -- (src/battle/BattleState.lua) -- so on that one frame nothing is covering
+  -- anything, and a write taken there is a freeze between the last battle
+  -- frame and the first frame of the fade.  What the player sees is the fade
+  -- appearing late, or appearing already part-way down.  Reported as an
+  -- obvious stutter on the way out of a battle, and this is where it was.
+  --
+  -- The transition that follows opens with a HOLD: POST_BATTLE_RETURN frames
+  -- at full opacity before GBFadeInFromWhite starts stepping the palette
+  -- (Timing.lua, Transition.BattleReturn:alpha -- and Wild Green's BLACK
+  -- OUTRO opens its own fade-in the same way, at alpha 1).  Ten frames of a
+  -- solid colour, already drawn, with the whole fade still ahead of them.
+  -- That is the frame to spend: the hitch lands on a screen that is not
+  -- moving and cannot move, and every step of the fade plays after it.
+  --
+  -- So battle.ended only arms it, and the pump takes the first covered frame
+  -- that arrives.  Armed rather than written immediately because the state to
+  -- write is the same either way -- the battle is already off the stack when
+  -- the event fires -- and because a transition the mod does not recognise
+  -- (a total conversion's own battle exit) should not mean no save at all:
+  -- the arm expires, and the save is still due -- SAVE ON LOADS waits for the
+  -- next covered screen it does know, and with that row off the ordinary
+  -- route path takes it at the next stop.
+  local RETURN_ARMED_FRAMES = 240
+
+  -- Is the screen a solid colour this frame?  A transition answers alpha()
+  -- with its own veil strength, so 1 means fully covered whatever is drawing
+  -- it -- the engine's white return in its hold, Wild Green's black outro on
+  -- the first frame of its fade-in.  Anything that does not answer, or
+  -- answers less than 1, is a picture the player can see through and is not
+  -- this window.
+  local function fullyVeiled(game)
+    local top = game and game.stack and game.stack.top and game.stack:top()
+    if type(top) ~= "table" or type(top.alpha) ~= "function" then return false end
+    local ok, a = pcall(top.alpha, top)
+    return ok and type(a) == "number" and a >= 1
+  end
+
+  local function writeUnderTheReturn(game)
+    if (state.returnArmed or 0) <= 0 then return end
+    -- Never inside a battle, and this is the one place that could have been:
+    -- a battle's own intro wipe is fully veiled too, so an arm left over from
+    -- the LAST battle would have written into the next one -- the one state
+    -- this mod refuses outright.  battle.started disarms for the same reason;
+    -- this is the belt to that brace.
+    if state.inBattle then
+      state.returnArmed = 0
+      return
+    end
+    state.returnArmed = state.returnArmed - 1
+    if not fullyVeiled(game) then return end
+    state.returnArmed = 0
+    loadScreenWrite(game, "battle return")
+  end
+
   mod.events:on("battle.ended", function()
-    loadScreenWrite(state.game, "battle")
+    state.returnArmed = RETURN_ARMED_FRAMES
   end)
 
   -- A manual save resets everything: the player just did the thing.  It is
@@ -1761,6 +1828,10 @@ return function(mod)
     -- interval below because this is a window, not a clock -- it lasts thirty
     -- two steps and then it is gone.
     writeUnderTheFade(game)
+
+    -- The other covered screen, on the same terms: the hold at the front of
+    -- the post-battle return, before the fade starts stepping.
+    writeUnderTheReturn(game)
 
     -- Time accrues wherever the player is.  A long gym battle counts toward
     -- the interval, so "5 MIN" means five minutes of playing rather than five

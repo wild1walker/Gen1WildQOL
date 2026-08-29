@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.24.0
+
+### Changed
+- **AUTO SAVE no longer writes going INTO a battle** (Gen1AutoSave 1.16.0).
+  The intro wipe is as covered a screen as the game has, which is why it was
+  a save window -- but it is the only covered screen you watch for a cue
+  rather than wait out: it opens onto a menu you are already reaching for, on
+  the most frequent transition in the game, so the hitch read as the battle
+  being slow to start every single encounter. Nothing is lost -- the end of
+  the same battle writes the same route with the outcome in it as well.
+
+### Fixed
+- **And coming OUT of one no longer stutters the fade.** `battle.ended` fires
+  in a gap: the engine pops the battle screen, emits, and only then pushes the
+  return transition -- so on that frame nothing is covering anything, and the
+  write was a freeze between the last battle frame and the first frame of the
+  fade. The transition opens with ten frames at full opacity before the
+  palette starts stepping; the write goes there now, so the hitch lands on a
+  solid colour and every step of the fade plays after it.
+
 ## 1.23.1
 
 ### Fixed
