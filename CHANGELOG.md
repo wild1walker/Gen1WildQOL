@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.26.0
+
+### Changed
+- **`PLAYER` is a row at the top of the menu.** Wild Green's player recolour
+  is the reason the cart is called what it is, and reaching it read
+  `WILD GREEN > OTHER MODS > MAKE IT GREEN > PLAYER` -- three doors deep,
+  behind the repository's name rather than the setting's. It is now
+  `WILD GREEN > PLAYER`, first in the list, above the cards and above the
+  manager. `OTHER MODS` goes back to meaning what a player installed
+  themselves.
+
+  The mechanism is `spec.adopted`: mods the cart pins that the suite gives a
+  door of their own, named for what the settings are. The card opens the same
+  screen `OTHER MODS` would have and writes through the same loader; only
+  where it sits and what it is called have changed. An adopted mod that is not
+  loaded is simply not a row.
+
+### Fixed
+- **The youngster no longer hops his way to Brock's gym** (Gen1Sprint 0.3.1).
+  0.3.0 fixed half of this; the other half was the half the escorts read.
+  `stepFramesCur` is the engine's "how long is the step in flight", and the
+  escort scripts read it as "how fast does the player move" to pin an NPC's
+  own step to it. An escort begun with **B held** pinned its guide to the
+  *sprinting* length while the escort's own scripted steps refused the sprint
+  and ran at the *walking* one -- so the guide darted a tile in half the
+  frames and stood frozen for the other half, a tile at a time, the whole way
+  there. A sprinted step no longer outlives its step.
+
 ## 1.25.0
 
 ### Added

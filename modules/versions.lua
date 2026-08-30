@@ -11,6 +11,6 @@ return {
   ["Gen1ModMenu"] = "0.9.0",
   ["Gen1Remember"] = "1.0.1",
   ["Gen1SoundQOL"] = "0.3.0",
-  ["Gen1Sprint"] = "0.3.0",
+  ["Gen1Sprint"] = "0.3.1",
   ["QualityOfLife"] = "maintained",
 }
