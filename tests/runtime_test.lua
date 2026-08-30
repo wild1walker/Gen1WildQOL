@@ -607,14 +607,14 @@ do
   for i, entry in ipairs(order) do installed[i] = entry.feature.id end
   eq(table.concat(installed, ","),
      "autosave,sprint,autocontinue,sound,follower,expshare,caught,banners,"
-       .. "interact,modmenu,gen151,menus,remember",
+       .. "interact,npcwalk,modmenu,gen151,menus,remember",
      "installation is the order these mods were built and tested against")
 
   local listed = {}
   for i, feature in ipairs(features) do listed[i] = feature.id end
   eq(table.concat(listed, ","),
-     "sprint,interact,banners,follower,remember,expshare,caught,gen151,"
-       .. "autosave,autocontinue,sound,menus,modmenu",
+     "sprint,interact,npcwalk,banners,follower,remember,expshare,caught,"
+       .. "gen151,autosave,autocontinue,sound,menus,modmenu",
      "the menu is grouped by what a player came looking for")
 
   -- every feature carries a rank, or the decoupling has a hole in it

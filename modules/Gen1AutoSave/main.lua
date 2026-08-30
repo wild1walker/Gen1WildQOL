@@ -300,6 +300,7 @@ return function(mod)
     if walking(game, ow) then return false end
     if scriptRunning(ow) then return false end
     if state.stillFor >= STILL_FOR then return true end
+    if mod.options:get("on_load") ~= false then return false end
     return state.settledAt ~= nil
       and state.clock - state.settledAt <= SETTLE_GRACE
   end
@@ -335,10 +336,28 @@ return function(mod)
   -- question; the right one is whether the player is in the middle of doing
   -- something, and in a menu they always are.
   --
-  -- So the doors are the three the README always named: a warp, the end of a
-  -- battle, and the player actually stopping.  The moment a menu CLOSES is
-  -- still one of them -- that is SETTLE_GRACE, and by then the menu is gone
-  -- and they are standing on the route with nothing pressed.
+  -- AND NEITHER IS THE MOMENT ONE CLOSES.
+  --
+  -- SETTLE_GRACE was the other half of that reasoning: the menu is gone, the
+  -- conversation has ended, the player is standing exactly where the game
+  -- left them and has not moved yet, so take it now.  What that describes is
+  -- the frame a player has been WAITING for.  They closed the box because
+  -- they wanted to go, and the write lands a beat after they are handed
+  -- control -- so the hitch is not in the pause, it is in the first stride
+  -- out of it.  Reported exactly that way: a little late after finishing an
+  -- interaction, and felt on running away.
+  --
+  -- With SAVE ON LOADS on there is no reason to take it: a screen the player
+  -- cannot see is coming -- the next door, the next battle -- and the save
+  -- waits for one with nothing lost but a few minutes of nothing happening.
+  -- So the grace window is the route path's, and the route path is what SAVE
+  -- ON LOADS switches OFF.  With the row off it is still there, because then
+  -- the route is the only place a save can ever go and a settled frame is the
+  -- best of them.
+  --
+  -- A real stop stays a window either way.  Standing still for STILL_FOR
+  -- seconds with no direction held is not a pause between two things the
+  -- player is doing; it is the player not doing anything.
   local function writeWindow(game)
     local ow = game and game.overworld
     if not (ow and ow.player) then return false end
@@ -980,6 +999,7 @@ return function(mod)
     if not syncSettled(game) then return end
     mod.log:info("autosave on a %s screen", tostring(why))
     write(game)
+    return true
   end
 
   -- ---------- what counts as progress
@@ -1031,7 +1051,6 @@ return function(mod)
   -- is strictly worse than the one that follows it.
   mod.events:on("battle.started", function()
     state.inBattle = true
-    state.returnArmed = 0
   end)
   mod.events:on("battle.ended", function() state.inBattle = false end)
 
@@ -1068,93 +1087,86 @@ return function(mod)
     return SCREENED_ENTRY[via] == true
   end
 
-  -- The two screens the game blacks out on its own.  Both fire while their
-  -- transition is still up, so the write lands under it: a warp once the new
-  -- map is in place, and a battle in the return hold before the fade back.
+  -- A door is a checkpoint, and this says which map changes are doors.  It
+  -- asks for the save and no longer takes it.
   --
-  -- One handler for both jobs, in this order: a warp is what makes the save
-  -- due, and the same frame is where it goes.
+  -- It used to write here as well, and that write was reported: map.entered
+  -- is the END of a warp's animation, not a covered frame.  The transition
+  -- has already popped itself by the time this fires and the new map is in
+  -- place behind nothing at all, so what the player saw was the game
+  -- arriving somewhere and then stopping dead for a moment -- "right when I
+  -- load in somewhere".  The black eight frames earlier is the same save at
+  -- a moment that cannot be seen, and writeUnderCover has already taken it.
+  --
+  -- This stays as the checkpoint because a fade that was never writable --
+  -- MIN_GAP, a sync mid-answer, a script still running -- must still leave
+  -- the save DUE, so the next covered screen can take it.
   mod.events:on("map.entered", function(event)
     if not enteredBehindAScreen(event) then return end
-    if mod.options:get("events") then request() end
-    loadScreenWrite(state.game, "warp")
-  end)
-
-  -- ---------- before the fade, not after it
-  --
-  -- map.entered is the END of a warp's animation, not the start of it: the
-  -- fade to black has already played by the time it fires, and the fade back
-  -- is zero steps long -- the map simply appears.  So a write there had the
-  -- whole cost of a save and nothing left in front of it to hide under, and
-  -- what the player saw was the door popping them through.
-  --
-  -- The first frames of the transition are the other side of the same black
-  -- screen and there are thirty-two of them.  Writing there puts the entire
-  -- fade AFTER the hitch: absorbHitch clamps the oversized frame back to one
-  -- logic step, and the palette then walks down to black one step per drawn
-  -- frame the way it is meant to.  The black screen is longer by what the
-  -- write cost.  That is the trade -- a slightly longer loading screen for an
-  -- animation that plays -- and it is the one the player asked for.
-  --
-  -- Tried on every frame of the transition rather than only its first,
-  -- because the first is the one the player may still be mid-stride on and
-  -- loadScreenWrite rightly refuses those.  Once it writes, `due` clears and
-  -- every later frame falls out of loadScreenWrite's second line, so this is
-  -- a table lookup for the rest of the fade.
-  --
-  -- The state written is the doorway being left: a tile and a facing the
-  -- player chose, on a map they know. map.entered stays as the fallback for a
-  -- warp whose fade was never writable -- MIN_GAP, a sync mid-answer, a
-  -- script still running -- and records the far side instead.
-  local function writeUnderTheFade(game)
-    local ow = game and game.overworld
-    if not (ow and ow.player) then
-      state.fading = false
+    -- ...unless this door's own black already took it, eight frames ago.
+    --
+    -- Asking again there is not free.  The write has just happened and
+    -- cleared `due`; a request on the far end of the same fade sets it
+    -- straight back, so the game arrives on the new map already owing a save
+    -- it does not owe -- and the route path takes that one a few seconds
+    -- later, in the middle of the walk away.  Which is the hiccup after a
+    -- door, arriving reliably rather than by accident, from the mechanism
+    -- meant to prevent it.
+    if state.fadeWrote then
+      state.fadeWrote = false
       return
     end
-    local fading = (ow.transitioning or ow.teleportOut) and true or false
-    if fading and not state.fading and mod.options:get("events") then
-      -- The door is the checkpoint, and this is the door.
-      request()
-    end
-    state.fading = fading
-    if not fading then return end
-    loadScreenWrite(game, "warp fade")
-  end
-  -- ---------- the battle's way out, one frame later than it used to be
-  --
-  -- battle.ended fires in a gap.  BattleState:finish pops the battle screen,
-  -- emits, and only THEN pushes the return transition
-  -- (src/battle/BattleState.lua) -- so on that one frame nothing is covering
-  -- anything, and a write taken there is a freeze between the last battle
-  -- frame and the first frame of the fade.  What the player sees is the fade
-  -- appearing late, or appearing already part-way down.  Reported as an
-  -- obvious stutter on the way out of a battle, and this is where it was.
-  --
-  -- The transition that follows opens with a HOLD: POST_BATTLE_RETURN frames
-  -- at full opacity before GBFadeInFromWhite starts stepping the palette
-  -- (Timing.lua, Transition.BattleReturn:alpha -- and Wild Green's BLACK
-  -- OUTRO opens its own fade-in the same way, at alpha 1).  Ten frames of a
-  -- solid colour, already drawn, with the whole fade still ahead of them.
-  -- That is the frame to spend: the hitch lands on a screen that is not
-  -- moving and cannot move, and every step of the fade plays after it.
-  --
-  -- So battle.ended only arms it, and the pump takes the first covered frame
-  -- that arrives.  Armed rather than written immediately because the state to
-  -- write is the same either way -- the battle is already off the stack when
-  -- the event fires -- and because a transition the mod does not recognise
-  -- (a total conversion's own battle exit) should not mean no save at all:
-  -- the arm expires, and the save is still due -- SAVE ON LOADS waits for the
-  -- next covered screen it does know, and with that row off the ordinary
-  -- route path takes it at the next stop.
-  local RETURN_ARMED_FRAMES = 240
+    if mod.options:get("events") then request() end
+  end)
 
-  -- Is the screen a solid colour this frame?  A transition answers alpha()
-  -- with its own veil strength, so 1 means fully covered whatever is drawing
-  -- it -- the engine's white return in its hold, Wild Green's black outro on
-  -- the first frame of its fade-in.  Anything that does not answer, or
-  -- answers less than 1, is a picture the player can see through and is not
-  -- this window.
+  -- ---------- the only frame nobody can see
+  --
+  -- Every version of this mod has picked its moments by asking WHERE the
+  -- player is -- in a warp, out of a battle, standing still.  That was the
+  -- wrong question, and it is why three different windows were each reported
+  -- as a stutter in turn.  A long frame is not felt because of where it
+  -- happens.  It is felt because SOMETHING ON SCREEN WAS SUPPOSED TO MOVE
+  -- AND DIDN'T.
+  --
+  -- Which makes the right question a very narrow one: is the screen a solid
+  -- colour this frame, and will it still be one on the next?  If it is, a
+  -- pause changes nothing -- the picture before and the picture after are the
+  -- same picture -- and the only cost is that the black lasts a little
+  -- longer.  Nowhere else in the game is that true.  Every other "covered"
+  -- screen is covered by something the player can still see past or press
+  -- through: a menu is a picture, a text box is a picture, and a fade that is
+  -- still STEPPING is an animation, so stalling it is exactly the freeze this
+  -- was trying to avoid.
+  --
+  -- A transition answers alpha() with the strength of its own veil
+  -- (Transition:alpha, BattleReturn:alpha), so `alpha() >= 1` is that
+  -- question asked directly rather than guessed at from a state's name.  The
+  -- windows it finds, and how long each holds:
+  --
+  --   a warp, a door, a cave mouth   the LAST EIGHT frames of the fade out.
+  --     GBFadeOutToBlack is a palette staircase, not a ramp: four steps of
+  --     eight frames, and the fourth is solid black (Transition.fadeAlpha,
+  --     home/fade.asm:43-46).  Then the map is simply there -- a warp's
+  --     fade-in is zero frames long (Timing.WARP_FADE_IN).
+  --   FLY, TELEPORT, DIG, ESCAPE ROPE   the same eight frames, in white.
+  --   the end of a battle    the ten frames of hold at the front of the
+  --     return, before GBFadeInFromWhite starts stepping
+  --     (Timing.POST_BATTLE_RETURN), and Wild Green's BLACK OUTRO opens its
+  --     own fade-in at alpha 1 the same way.
+  --   a script fade          the frames a bracketing GBFadeOutToBlack holds
+  --     at black around a HideObject.
+  --
+  -- And, just as important, the ones it does NOT find.  A battle's intro wipe
+  -- has no alpha() at all (src/render/BattleTransition.lua), so the most
+  -- frequent transition in the game -- the one that opens onto a menu the
+  -- player is already reaching for -- is not a window and cannot become one
+  -- by accident.  Neither is the first frame of a warp: at alpha 0 the map is
+  -- still fully drawn, which is precisely where the door freeze that this
+  -- replaces used to land.
+  --
+  -- This is one function because it is one idea.  It replaced three -- a
+  -- write at the START of a warp fade, a write on map.entered, and an armed
+  -- write after a battle -- and each of those was a guess at the same thing.
   local function fullyVeiled(game)
     local top = game and game.stack and game.stack.top and game.stack:top()
     if type(top) ~= "table" or type(top.alpha) ~= "function" then return false end
@@ -1162,26 +1174,34 @@ return function(mod)
     return ok and type(a) == "number" and a >= 1
   end
 
-  local function writeUnderTheReturn(game)
-    if (state.returnArmed or 0) <= 0 then return end
-    -- Never inside a battle, and this is the one place that could have been:
-    -- a battle's own intro wipe is fully veiled too, so an arm left over from
-    -- the LAST battle would have written into the next one -- the one state
-    -- this mod refuses outright.  battle.started disarms for the same reason;
-    -- this is the belt to that brace.
-    if state.inBattle then
-      state.returnArmed = 0
+  -- The checkpoint half is separate from the window half, and stays where it
+  -- was: a door is worth saving FOR the moment it starts, and the black that
+  -- makes it safe to save IN arrives twenty-four frames later in the same
+  -- fade.  Asking for the save at the top is what makes it due in time to be
+  -- taken at the bottom.
+  local function writeUnderCover(game)
+    local ow = game and game.overworld
+    if not (ow and ow.player) then
+      state.fading = false
       return
     end
-    state.returnArmed = state.returnArmed - 1
+    local fading = (ow.transitioning or ow.teleportOut) and true or false
+    if fading and not state.fading then
+      -- a new door: nothing has been taken under this one yet
+      state.fadeWrote = false
+      if mod.options:get("events") then request() end
+    end
+    state.fading = fading
+    -- Never inside a battle.  Nothing in a battle answers alpha() today, so
+    -- this costs one table read and buys the guarantee outright rather than
+    -- depending on that staying true.
+    if state.inBattle then return end
     if not fullyVeiled(game) then return end
-    state.returnArmed = 0
-    loadScreenWrite(game, "battle return")
+    if loadScreenWrite(game, "a screen nobody can see") then
+      state.fadeWrote = true
+    end
   end
 
-  mod.events:on("battle.ended", function()
-    state.returnArmed = RETURN_ARMED_FRAMES
-  end)
 
   -- A manual save resets everything: the player just did the thing.  It is
   -- otherwise none of this mod's business -- writeSave notifies the sync
@@ -1822,16 +1842,11 @@ return function(mod)
       return
     end
 
-    -- The black screen a warp puts up is the best frame this mod gets, and
-    -- its first frames are better than its last: everything after them is
-    -- animation, and animation is what absorbs the write.  Ahead of the
-    -- interval below because this is a window, not a clock -- it lasts thirty
-    -- two steps and then it is gone.
-    writeUnderTheFade(game)
-
-    -- The other covered screen, on the same terms: the hold at the front of
-    -- the post-battle return, before the fade starts stepping.
-    writeUnderTheReturn(game)
+    -- The one frame nobody can see: a screen already at a solid colour that
+    -- will still be one next frame.  Ahead of the interval below because it
+    -- is a window rather than a clock -- eight frames of black at the bottom
+    -- of a warp fade, ten at the front of a battle's return, and then gone.
+    writeUnderCover(game)
 
     -- Time accrues wherever the player is.  A long gym battle counts toward
     -- the interval, so "5 MIN" means five minutes of playing rather than five

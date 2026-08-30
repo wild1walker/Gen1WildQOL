@@ -124,6 +124,23 @@ return {
       aliases = { "qol_easy_interactions", "FieldMenu" },
     },
     {
+      id = "npcwalk",
+      group = "general",
+      install_seq = 14,
+      maintained = true,
+      priority = 100,
+      dir = "QualityOfLife",
+      entry = "bundle_npc_walk.lua",
+      label = "NPC WALK",
+      description = "NPCS TAKE ONE STEP PER TILE INSTEAD OF TWO, SO AN ESCORT WALKS INSTEAD OF HOPPING.",
+      -- The feature's own row is the master, and it is live: the patched
+      -- methods read it every time they draw, so OFF is the engine's own
+      -- cadence back with no relaunch.
+      enabledKey = "qol_npc_walk",
+      default = true,
+      aliases = { "qol_npc_walk", "NpcWalk" },
+    },
+    {
       id = "banners",
       group = "general",
       install_seq = 12,
