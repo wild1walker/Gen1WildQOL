@@ -1038,7 +1038,7 @@ end
 
 -- A bundle whose features are pure schema: nothing to install, everything to
 -- show.  Three cards' worth, plus one feature that names no card at all.
-local function menuFixture(modId, screenId, pairedId, featureList)
+local function menuFixture(modId, screenId, pairedId, featureList, adopted)
   local mod = fakeMod(modId)
   for _, feature in ipairs(featureList) do
     mod.files["modules/" .. feature.dir .. "/main.lua"] = ([[
@@ -1054,6 +1054,7 @@ local function menuFixture(modId, screenId, pairedId, featureList)
   local spec = {
     id = modId, menu_label = modId:upper(), screen_id = screenId,
     paired_bundle = pairedId,
+    adopted = adopted,
     groups = {
       { id = "world", label = "OUT IN THE WORLD" },
       { id = "pokemon", label = "YOUR POKEMON" },
@@ -1362,6 +1363,65 @@ do
   eq(after:valueOf(after.entries[1]), "OFF",
      "a write on the owning bundle shows up on this one's row")
   ui.stored["arena_enabled"] = nil
+end
+
+-- --------------------------------- a mod the cart pins gets a door of its own
+
+do
+  io.write("an adopted mod is a top-level row, not a name under OTHER MODS\n")
+
+  local Bundle = load_("runtime/bundle.lua", function(name)
+    return load_("runtime/" .. name .. ".lua")
+  end)
+
+  local features = {
+    { id = "sprint", dir = "Sprint", entry = "main.lua", label = "SPRINT",
+      group = "world", enabledKey = "enabled", default = true, priority = 100 },
+  }
+  local adopted = {
+    { mod = "wild_green", label = "PLAYER",
+      description = "WHAT YOUR CHARACTER WEARS." },
+  }
+  local mod, spec = menuFixture("gen1_wild_qol", "Gen1WildQOL", "gen1_wild_ui",
+                                features, adopted)
+  Bundle.install(mod, spec, features)
+
+  local others = {
+    { id = "wild_green", name = "Make It Green", schema = {
+        { key = "player", type = "choice", label = "PLAYER", default = "green",
+          choices = { { "GREEN", "green" }, { "RED", "red" } } },
+      } },
+    { id = "someones_mod", name = "Somebody Else's", schema = {
+        { key = "on", type = "toggle", label = "ON", default = true },
+      } },
+  }
+
+  local game = fakeGame(others)
+  local root = mod.screens["Gen1WildQOL"].new(game)
+
+  eq(labelsOf(root), "PLAYER,OUT IN THE WORLD,OTHER MODS,MOD MANAGER",
+     "the adopted mod is FIRST -- above the cards, and above the manager")
+  eq(root.entries[1].kind, "mod", "and it opens the mod's own settings screen")
+  eq(root.entries[1].modId, "wild_green", "for the mod it named")
+
+  -- one door, not two: it must not also be listed under OTHER MODS
+  local card = mod.screens["Gen1WildQOL__other_mods"].new(game)
+  eq(labelsOf(card), "SOMEBODY ELSE'S",
+     "OTHER MODS is what the player installed, not what the cart pins")
+  eq(root:valueOf(root.entries[3]), "1 MODS", "and the count agrees")
+
+  -- the row goes straight to the settings, rather than to a name first
+  local page = mod.screens["Gen1WildQOL__mod"].new(game, { modId = "wild_green" })
+  eq(labelsOf(page), "PLAYER,RESET DEFAULTS",
+     "WILD GREEN > PLAYER > the setting, with nothing in between")
+
+  -- an adopted id that is not loaded is simply not a row
+  local bare = mod.screens["Gen1WildQOL"].new(fakeGame({
+    { id = "someones_mod", name = "Somebody Else's", schema = {
+        { key = "on", type = "toggle", label = "ON", default = true } } },
+  }))
+  eq(labelsOf(bare), "OUT IN THE WORLD,OTHER MODS,MOD MANAGER",
+     "a cart that does not pin it has one fewer row, not a dead end")
 end
 
 -- --------------------------------------------- the other mods that are loaded

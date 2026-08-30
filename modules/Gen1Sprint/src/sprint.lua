@@ -98,10 +98,43 @@ local function scriptWalking(world, player)
   return false
 end
 
+-- ------- a sprinted step must not outlive its step
+--
+-- `stepFramesCur` is the engine's "how many frames is the step currently in
+-- flight", written by Player:tryMove out of stepLength() -- which is the
+-- number this mod shortens.  It is never cleared when the step lands, and
+-- the escort scripts read it as something else entirely: "how fast does the
+-- player move", to pin an NPC's own step to it.
+--
+--     guy.stepFrames = ow.player.stepFramesCur or ow.player.stepFrames
+--         -- data/scripts/story5.lua, the Pewter youngster
+--         -- data/scripts/story2.lua, Oak's walk to the lab
+--
+-- So an escort begun with B held pins its guide to the SPRINTING length,
+-- while the escort's own scripted steps stand the sprint down
+-- (scriptWalking above) and run at the walking one.  The guide then darts a
+-- tile in half the frames and stands frozen for the other half, a tile at a
+-- time, the whole way there.  Reported as the NPC hopping.
+--
+-- The repair is to put the walking length back the moment a step lands,
+-- which is what the engine would have if this mod were not here.  It cannot
+-- simply clear the field: on a BICYCLE the walking length is the bike's
+-- eight frames, not stepFrames' sixteen, and a script falling back to
+-- stepFrames would desync the same way in the other direction.  So it asks
+-- stepLength() again with this mod standing down, which answers the bike
+-- and the terrain correctly and answers the sprint not at all.
+--
+-- `repairing` is that stand-down, and it is a plain upvalue rather than a
+-- field on the player: it is true for the length of one call this file
+-- makes itself, and nothing re-enters stepLength inside it.
+local repairing = false
+
 -- `read` is a zero-argument function returning the current snapshot.
 -- `world` is mod.world, or nil where there is none to ask.
 function Sprint.newWrapper(read, world)
   return function(next, frames, ctx)
+    -- the repair asking what the step would be without this mod
+    if repairing then return next(frames, ctx) end
     -- Whatever this hands `next` REPLACES the argument list for the whole
     -- rest of the chain (src/mods/Hooks.lua nextFn), so ctx is passed along
     -- on every path including the ones that change nothing.  Returning
@@ -184,6 +217,35 @@ function Sprint.install(mod, opt, multipliers)
 
   sync()
 
+  -- After every step the player takes, put the walking length back -- see
+  -- the note over `repairing`.  world.stepped fires once the cell has
+  -- landed, which is the frame the value stops describing anything.
+  --
+  -- Guarded on `moving` because a chained step (a held direction, a scripted
+  -- walk) can already be in flight by the time this runs, and that step's
+  -- length is still live.  Guarded on nothing else: with the sprint off the
+  -- answer is the value that was there anyway, so this is idempotent rather
+  -- than conditional on which rows are set.
+  local function repairStepFrames()
+    local ok, ow = pcall(function() return mod.world:overworld() end)
+    if not ok or type(ow) ~= "table" then return end
+    local player = ow.player
+    if type(player) ~= "table" or type(player.stepLength) ~= "function" then
+      return
+    end
+    if player.moving then return end
+    repairing = true
+    local okLen, frames = pcall(player.stepLength, player)
+    repairing = false
+    if okLen and type(frames) == "number" then
+      player.stepFramesCur = frames
+    end
+  end
+
+  if mod.world then
+    mod.events:on("world.stepped", repairStepFrames)
+  end
+
   -- The manager writes an option and broadcasts; nothing polls.  A payload
   -- naming another mod is ignored, and one naming nothing at all is taken
   -- as "something changed", which is the safe reading.
@@ -204,6 +266,9 @@ function Sprint.install(mod, opt, multipliers)
       if not input or not input.isDown then return false end
       return input:isDown(cfg.button) and true or false
     end,
+    -- Put the walking length back on a landed step; the suite drives it,
+    -- and a neighbour that moves the player itself may want it too.
+    repair = repairStepFrames,
     -- The live settings, copied: a caller cannot reach in and edit them.
     settings = function()
       local cfg, out = read(), {}
