@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.25.0
+
+### Added
+- **`NPC WALK`.** An NPC who walks you somewhere moved its legs twice as fast
+  as it covered ground, which beside a walking player does not read as walking
+  at all -- it reads as a hop. It was two constants that were the same number
+  for the player and not for anyone else: a player's tile takes sixteen frames
+  and the walk cycle is sixteen frames long, so one step per tile; an NPC's
+  tile takes thirty-two (NPCs move at half the player's speed in Gen 1) and
+  the cycle was still sixteen. Two steps per tile.
+
+  The cycle is tied to the step now, so one walk cycle fits whatever an
+  entity's own tile length is, and the foot alternates once per tile. Oak's
+  walk to the lab pins his step to the player's and was already right; it is
+  byte for byte unchanged, and the suite holds that. It also fixes the other
+  end of the same mismatch: with `SPRINT` on, a pinned escort's tile is eight
+  frames against a sixteen-frame cycle, so the escort lifted a leg once every
+  two tiles and slid the rest of the way.
+
+### Fixed
+- **Every autosave now lands on a frame nobody can see** (Gen1AutoSave 1.17.0).
+  The mod used to pick its moments by asking *where* the player was, and each
+  of those places was reported as a stutter in turn: the first frame of a
+  door's fade (where the map is still fully drawn, so what freezes is the
+  world), `map.entered` at the far end of it (where the transition has already
+  popped, so the game arrives somewhere and stops dead), and a beat after a
+  menu closes (which is the frame you have been waiting for, so the hitch
+  lands in your first stride out of it).
+
+  There is one window now, and it is asked directly: is the screen a solid
+  colour this frame, and will it still be one on the next? That is the last
+  eight frames of a warp fade -- `GBFadeOutToBlack` is a four-step palette
+  staircase and only the fourth step is black -- the ten frames of hold at the
+  front of a battle's return, and the black a script fade holds. A pause on
+  any of those changes nothing on screen; the black is simply longer.
+
+  A door also no longer leaves a save owing after its own black has taken one,
+  which was the mechanism producing the hiccup it was meant to prevent.
+
 ## 1.24.0
 
 ### Changed
