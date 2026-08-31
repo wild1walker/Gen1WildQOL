@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.27.0
+
+Everything the nightly channel built since 1.26.0, in one release.
+
+**`TRAINER REMATCH` is a new feature.** Talk to a trainer you have already
+beaten, read them out with `A`, and fight them again. The price follows the
+levels rather than being a number somebody picked, and a rematch costs half of
+what it pays — the engine's own win branch adds the prize money, so the fee is
+set against it rather than bolted on. Nothing is built until you say yes.
+
+It is a row of its own under `BATTLE`, on by default, and live: the
+`world.talk` wrap reads the row on every `A` press, so `OFF` is the vanilla
+interaction back with nothing left running.
+
+**Closing a menu, or standing still, no longer takes an autosave.** Two of the
+routes into a write were firing on the quiet, which is exactly when a player
+notices the stutter and exactly when there is nothing worth saving. The same
+window the fade-out fix uses now guards those routes too, so a write still
+lands on a frame nobody can see — but only when something happened.
+
+**Map POKéMON stopped rendering outside the game screen.** A follower or a map
+sprite whose cell sits off the visible area queued a post-zone redraw that the
+renderer replays in screen space, so it painted into the black beside the game
+rather than being culled with everything else.
+
+**The `SELECT` menu's editor only offers pages it can actually arrange.** A
+context whose menu is built by a mod that is not installed is marked
+unavailable, and the page is not shown at all — stepping onto a page that can
+never hold a row read as the editor being broken rather than as the menu being
+absent.
+
+**An option row can be read many times a frame without paying for it twice.**
+`optionset.read` walks the live save, the mod's option store and the row's
+fallbacks; it now hands out a generation token a caller can cache against, so a
+per-frame reader asks once and re-reads only when something was written.
+
 ## 1.26.0
 
 ### Changed

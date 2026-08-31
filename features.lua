@@ -239,6 +239,23 @@ return {
       suppress_hooks = { ["ui.options.rows"] = true },
     },
     {
+      id = "rematch",
+      group = "battle",
+      install_seq = 15,
+      maintained = true,
+      priority = 100,
+      dir = "Gen1Rematch",
+      entry = "main.lua",
+      label = "TRAINER REMATCH",
+      description = "TALK TO A TRAINER YOU HAVE BEATEN, READ THEM OUT WITH A, AND FIGHT THEM AGAIN.",
+      -- The feature's own row is the master and it is live: the world.talk
+      -- wrap reads it on every A press, so OFF is the vanilla interaction
+      -- back with nothing to relaunch.
+      enabledKey = "enabled",
+      default = true,
+      aliases = { "Gen1Rematch", "gen1_rematch", "rematch" },
+    },
+    {
       id = "caught",
       group = "battle",
       install_seq = 11,
