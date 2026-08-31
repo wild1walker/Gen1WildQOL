@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.27.3
+
+Carries **Gen1Follower 1.6.2**.
+
+- **The black box around the overworld character on the way into a battle.** A
+  full-colour sprite marks itself out of the colorize pass — a sentence about
+  the world canvas, where it is drawn. The same draw runs with the **UI** pass
+  current during a battle transition, and the UI theme rings every UI-pass
+  rectangle with a one-pixel black skirt, so the mark became a ring round the
+  character's head. The sprite now marks only in the world pass.
+
 ## 1.27.2
 
 Carries **Gen1Follower 1.6.1**.

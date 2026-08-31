@@ -1116,6 +1116,40 @@ return function(mod)
   -- So in ADVANCED this does not queue at all.  It falls through to the draw
   -- below, which marks its rectangle and puts the sprite on the canvas like
   -- everything else on the map, and the canvas cuts it off at the edge.
+  -- ------- and only in the pass the mark is FOR
+  --
+  -- A trueColor mark says "leave this rectangle out of the colorize pass",
+  -- and that is a sentence about the WORLD canvas: it is where this sprite is
+  -- drawn and where the pass would otherwise read its colours as four shades.
+  --
+  -- The same draw runs with the UI pass current during a battle transition,
+  -- and a UI-pass mark is a different animal.  Gen1WildUI's theme wraps
+  -- markTrueColor and paints a one-pixel black skirt round every UI-pass rect
+  -- -- that is how it keeps raw art and a shaded page agreeing at the seam --
+  -- so a UI-pass mark from a SPRITE is a black ring drawn round a character.
+  -- The theme's own comment says so: "a world-pass mark is the follower and
+  -- the map's characters ... a black skirt would be a black outline drawn
+  -- round a character on a lit map."  It gates on the pass for exactly this,
+  -- and the gate cannot help when the sprite arrives in the other pass.
+  --
+  -- Reported as a white box with a black ring round the player's head on the
+  -- way into a battle, in DARK -- the only theme that paints a skirt.  Known
+  -- to be a UI-pass mark rather than guessed to be one: that theme paints a
+  -- skirt only where a rect actually landed in the UI list, so a skirt round
+  -- the player IS a UI-pass mark and can be nothing else.
+  --
+  -- An engine too old to answer keeps the old behaviour rather than silently
+  -- losing the mark: the question is new, the mark is not.
+  local function marksTrueColor(def)
+    if not (def and def.trueColor) then return false end
+    if type(PaletteFX.markTrueColor) ~= "function" then return false end
+    if type(PaletteFX.spriteRedrawPassActive) ~= "function" then return true end
+    local ok, world = pcall(PaletteFX.spriteRedrawPassActive)
+    if not ok then return true end
+    return world and true or false
+  end
+  mod.exports.marksTrueColor = marksTrueColor
+
   -- ------- the exempt rectangle goes INSIDE the sprite, never outside it
   --
   -- A trueColor rect is spliced onto the frame's zone list and re-blits its
@@ -1247,7 +1281,7 @@ return function(mod)
         return
       end
 
-      if self.def.trueColor and PaletteFX.markTrueColor then
+      if marksTrueColor(self.def) then
         local rx, ry, rw, rh = trueColorRect(anchorX, anchorY, w, h)
         if rx then PaletteFX.markTrueColor(rx, ry, rw, rh) end
       end
