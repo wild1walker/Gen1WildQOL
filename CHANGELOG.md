@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.27.1
+
+Everything 1.27.0 carried as an overlay now comes from the mod that owns it,
+each of which has cut a release of its own:
+
+| | |
+|---|---|
+| Gen1AutoSave | 1.17.0 → **1.18.0** |
+| Gen1Follower | 1.5.1 → **1.6.0** |
+| Gen1MenuManager | 0.3.2 → **0.4.0** |
+
+`overlays/` is empty again, which is the state it is meant to be in. Nothing a
+player sees changes: `modules/` is byte-identical to 1.27.0 apart from MENU
+LAYOUT publishing its contexts.
+
+A standalone install of any of those three now gets the fixes too, which it did
+not while they lived here.
+
 ## 1.27.0
 
 Everything the nightly channel built since 1.26.0, in one release.
