@@ -9,6 +9,7 @@ return {
   ["Gen1Follower"] = "1.5.1",
   ["Gen1MenuManager"] = "0.3.2",
   ["Gen1ModMenu"] = "0.9.0",
+  ["Gen1Rematch"] = "maintained",
   ["Gen1Remember"] = "1.0.1",
   ["Gen1SoundQOL"] = "0.3.0",
   ["Gen1Sprint"] = "0.3.1",
