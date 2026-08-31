@@ -1116,6 +1116,41 @@ return function(mod)
   -- So in ADVANCED this does not queue at all.  It falls through to the draw
   -- below, which marks its rectangle and puts the sprite on the canvas like
   -- everything else on the map, and the canvas cuts it off at the edge.
+  -- ------- the exempt rectangle goes INSIDE the sprite, never outside it
+  --
+  -- A trueColor rect is spliced onto the frame's zone list and re-blits its
+  -- region RAW, out of the colorize pass.  Renderer.scissorClamped rounds
+  -- every zone OUTWARD on purpose -- floor the near edge, ceil the far one,
+  -- plus SCISSOR_PIXEL_BIAS -- so that two SGB zones share an edge instead of
+  -- letting the letterbox show through between them (#373).  Right for zones,
+  -- wrong for this: an exempt region a pixel wider than the sprite leaves a
+  -- ring of BACKGROUND outside the colorize pass.
+  --
+  -- The ring is invisible while the ground around the sprite looks much the
+  -- same either way.  Then a battle wipes the screen, the ground goes and the
+  -- ring does not, and it is a square outline around the character.  Reported
+  -- as exactly that, in ADVANCED -- the one mode where honorsTrueColor()
+  -- splices these at all, which is why it is that mode and no other.
+  --
+  -- This rounded OUTWARD too (floor the origin, ceil the size), so the rect
+  -- was already up to a pixel proud of the sprite before the scissor made it
+  -- a pixel prouder.  It rounds inward now and insets one more, which is what
+  -- the scissor can give back.  What is left is a subset of the sprite, so the
+  -- widest the exempt region can round out to is the sprite's own edge.
+  --
+  -- The pixel handed back is the sprite's outermost ring, which goes through
+  -- the pass with everything else.  On these sprites that ring is the black
+  -- outline, and an outline is the one colour the pass has nothing to do to.
+  local function trueColorRect(anchorX, anchorY, w, h)
+    local x0 = math.ceil(anchorX - w / 2) + 1
+    local y0 = math.ceil(anchorY - h) + 1
+    local x1 = math.floor(anchorX + w / 2) - 1
+    local y1 = math.floor(anchorY) - 1
+    if x1 <= x0 or y1 <= y0 then return nil end
+    return x0, y0, x1 - x0, y1 - y0
+  end
+  mod.exports.trueColorRect = trueColorRect
+
   local function needsRedraw()
     if type(PaletteFX.honorsTrueColor) ~= "function" then return true end
     local ok, honored = pcall(PaletteFX.honorsTrueColor)
@@ -1213,8 +1248,8 @@ return function(mod)
       end
 
       if self.def.trueColor and PaletteFX.markTrueColor then
-        PaletteFX.markTrueColor(math.floor(anchorX - w / 2),
-          math.floor(anchorY - h), math.ceil(w), math.ceil(h))
+        local rx, ry, rw, rh = trueColorRect(anchorX, anchorY, w, h)
+        if rx then PaletteFX.markTrueColor(rx, ry, rw, rh) end
       end
       love.graphics.draw(followerImg, quad, anchorX, anchorY,
         0, sx, scale, 8, 16)

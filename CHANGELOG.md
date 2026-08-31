@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.27.2
+
+Carries **Gen1Follower 1.6.1**.
+
+- **A black square outline no longer forms around the character on the way into
+  a battle.** A full-colour overworld sprite marks a rectangle to be re-blitted
+  raw, out of the colorize pass, and that rectangle was rounded outward on both
+  sides of the fence — by the mod and again by the renderer's scissor, which
+  rounds every zone outward on purpose. The margin is background, and
+  background left out of the pass is invisible until the ground changes: the
+  battle wipe takes the ground and leaves the ring. `ADVANCED` and `LIGHT`
+  only, which is what named the cause.
+
 ## 1.27.1
 
 Everything 1.27.0 carried as an overlay now comes from the mod that owns it,
