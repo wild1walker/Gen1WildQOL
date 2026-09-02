@@ -300,6 +300,47 @@ return {
       aliases = { "Gen151", "gen151" },
     },
 
+    -- ---- the machines
+    --
+    -- Two rules about TMs and HMs, and they are deliberately two rows on two
+    -- different cards rather than one MACHINES submenu.  What they change has
+    -- nothing in common past the word: one is about what the bag keeps, the
+    -- other about what a POKeMON is allowed to forget, and a player looking
+    -- for either will look under the thing it changes.
+    {
+      id = "forgethm",
+      group = "pokemon",
+      install_seq = 16,
+      maintained = true,
+      priority = 100,
+      dir = "QualityOfLife",
+      entry = "bundle_forget_hm.lua",
+      label = "FORGET HM MOVES",
+      description = "AN HM MOVE CAN BE REPLACED WHEN A POKEMON LEARNS A FIFTH ONE. THE HM ITSELF IS NEVER USED UP, SO IT CAN ALWAYS BE TAUGHT BACK.",
+      -- The feature's own row is the master and it is live: the wrapper reads
+      -- it on the frame it would act, so OFF is the engine's refusal back with
+      -- nothing to relaunch.
+      enabledKey = "qol_forget_hm",
+      default = true,
+      aliases = { "qol_forget_hm", "ForgetHM" },
+    },
+    {
+      id = "reusabletms",
+      group = "items",
+      install_seq = 17,
+      maintained = true,
+      priority = 100,
+      dir = "QualityOfLife",
+      entry = "bundle_reusable_tms.lua",
+      label = "REUSABLE TMS",
+      description = "A TM IS KEPT WHEN IT IS USED, THE WAY AN HM ALWAYS HAS BEEN.",
+      -- Live for the same reason: the verdict is retuned on the use itself,
+      -- so OFF spends the TM again from the next teach onward.
+      enabledKey = "qol_reusable_tms",
+      default = true,
+      aliases = { "qol_reusable_tms", "ReusableTMs" },
+    },
+
     -- ---- saving
     {
       id = "autosave",

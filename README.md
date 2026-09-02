@@ -27,6 +27,8 @@ itself. Nothing is all-or-nothing.
 | **CAUGHT MARKER** | on | originally [Quality of Life](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol) ‡ |
 | **AREA BANNER** | on, 3s | Quality of Life ‡ |
 | **EASY HM USE** | on | Quality of Life ‡ |
+| **FORGET HM MOVES** | on | this repository |
+| **REUSABLE TMS** | on | this repository |
 | **REMEMBER MOVES** | on | [Gen1Remember](https://github.com/wild1walker/Gen1Remember) |
 | **MENU LAYOUT** † | on | [Gen1MenuManager](https://github.com/wild1walker/Gen1MenuManager) |
 | **MOD MANAGER** † | on | [Gen1ModMenu](https://github.com/wild1walker/Gen1ModMenu) |
@@ -83,8 +85,27 @@ A row marked `*` needs a relaunch to take effect, and the footer says so. That
 happens for features whose upstream mod has no off switch of its own: the
 bundle gates those at load rather than pretending to switch something that is
 already installed. Features that do have one — SPRINT, AUTO SAVE, AUTO
-CONTINUE, ALL 151, AREA BANNER, CAUGHT MARKER and EASY HM USE
-— switch live.
+CONTINUE, ALL 151, AREA BANNER, CAUGHT MARKER, EASY HM USE, FORGET HM MOVES
+and REUSABLE TMS — switch live.
+
+## The two rules about machines
+
+`REUSABLE TMS` keeps a TM when it is used, the way an HM already is. The
+engine answers a machine with one of two verdicts — `learn`, which spends the
+item, and `learnkept`, which does not — and the bag calls `consume` inside
+`if result == "learn"`. So this answers the verdict an HM would have answered,
+and the two places that spend a TM are simply never reached. Every refusal is
+still the engine's: a POKéMON that cannot learn the move is still refused, and
+one that already knows it is still told so.
+
+`FORGET HM MOVES` drops the `HM techniques can't be deleted!` refusal, so an
+HM move can be replaced when a POKéMON learns a fifth — which is the only way
+to remove a move in this generation, and the reason `REMEMBER MOVES` exists
+next to it. It cannot strand a save: an HM is never used up, so the move can
+be taught back from the same one for as long as the bag holds it.
+
+Both are Gen 1 only. Gold runs its own item and forget-move screens, which
+these do not touch, and each stands down on that boot rather than pretending.
 
 ## The SELECT menu is a list other mods can join
 

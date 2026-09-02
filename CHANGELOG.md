@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.29.0
+
+Two rules about machines, as two rows of their own. Both ship **on**, both are
+live — the code reads its row on the frame it would act, so OFF is the
+cartridge back with nothing to relaunch — and both are Gen 1 only.
+
+- **REUSABLE TMS** (`OPTION > GEN1WILD QOL > ITEMS`). A TM is kept when it is
+  used, the way an HM always has been.
+
+  The engine answers a machine with one of two verdicts and the only
+  difference between them is whether the bag spends the item:
+
+  ```lua
+  -- HMs are never consumed; TMs are single-use
+  return (itemDef.machine.kind == "HM" and "learnkept" or "learn"), ...
+  ```
+
+  and `BagMenu` calls `consume` inside `if result == "learn"` — twice, because
+  a POKéMON with four moves goes through the forget list first and the TM is
+  only spent if the swap actually happened. So this answers the verdict an HM
+  would have answered, and both of those call sites are simply never reached.
+  Nothing is re-implemented and no purchase is refunded after the fact, which
+  is the version of this that would have got the forget-list case wrong.
+
+  Every refusal is still the engine's: a species that cannot learn the move is
+  still refused with its `SFX_DENIED`, and a POKéMON that already knows it is
+  still told so.
+
+- **FORGET HM MOVES** (`OPTION > GEN1WILD QOL > POKEMON`). An HM move can be
+  replaced when a POKéMON learns a fifth, which is the only way to remove a
+  move in this generation.
+
+  `MoveLearnMenu:update` checks the row against `IsMoveHM` before it swaps and
+  prints `HM techniques can't be deleted!` instead. That table is a file-local
+  in the engine, so the refusal cannot be switched off from outside — but it
+  can be arrived at first. The wrapper answers the one frame the engine would
+  have refused (the forget list is up, A is down, the row is an HM) and runs
+  the engine's own three lines in its place, so a forgotten HM reads exactly
+  like a forgotten anything else — past the check it *is* the same code. Every
+  other frame falls through untouched.
+
+  `REMEMBER MOVES` routes its relearn through the same screen, so it is
+  covered by the same change without knowing about it.
+
+  It cannot strand a save. An HM is never used up — which is the rule the row
+  above is named after — so the move can always be taught back from the same
+  one.
+
+`tests/qol_machines_test.lua` drives both against engine stand-ins: the
+verdicts, the option going off, a second install not stacking a wrapper on a
+wrapper, and the third return value `ItemEffects.use` carries for a healing
+item, which a two-value wrapper would have eaten and taken the jingle off a
+POTION.
+
 ## 1.28.0
 
 - **Voxel support, and it is a work in progress.** It works best with **potato
