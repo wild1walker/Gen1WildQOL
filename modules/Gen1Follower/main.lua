@@ -1298,10 +1298,19 @@ return function(mod)
   -- voxel mode and build a billboard directly from the sprite definition.
   -- Compose a narrowly tagged mesh hook with any existing mount-size hook so
   -- Gen1Follower, Dramatic Sky Ride and the voxel provider can coexist.
+  --
+  -- The bundle resolves which voxel mod is installed once, for every feature
+  -- that asks -- see runtime/voxel.lua -- so the list of forks lives in one
+  -- place rather than in each of the three files that wants one.  The inline
+  -- list is the fallback for this file running outside the bundle, where
+  -- there is no runtime to ask; it is deliberately the same list.
   local function dramaticModule(name)
+    local voxel = mod.voxel
+    if voxel then return voxel.require(name) end
     if not mod.find then return nil end
     local providerIds = {
-      "BATTLE_ART_VOXEL_FORK", "DRAMALESS_SHAPE", "DRAMATIC_SHAPE"
+      "BATTLE_ART_VOXEL_FORK", "DRAMALESS_SHAPE", "potato_voxel",
+      "DRAMATIC_SHAPE", "dramatic_shape_brick", "ds_fp_ceiling"
     }
     for _, id in ipairs(providerIds) do
       local okHandle, handle = pcall(mod.find, mod, id)

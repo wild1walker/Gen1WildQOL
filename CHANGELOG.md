@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.28.0
+
+- **Voxel support, and it is a work in progress.** It works best with **potato
+  voxel** right now. The other forks — Battle Art Voxel, Dramatic Shape and its
+  variants, and Dramaless Shape — run on the same code path and should work,
+  but are less proven. No voxel mod is required: with none installed, nothing
+  about the bundle changes.
+
+  The battle-overlay host used to look for `DRAMATIC_SHAPE` by name and nothing
+  else, so a player on any other fork got overlays left behind in the GB frame
+  while the battle was drawn on a world canvas. `runtime/voxel.lua` resolves
+  whichever fork is present, once for the whole bundle, and the host asks it
+  instead of asking for one mod.
+
+  The answer is still no unless a fork says yes on the frame: a fork that
+  leaves the HUDs in the GB frame, and no voxel mod at all, both take the path
+  they always took.
+
+- **The autosave waits for the battle's outcome to be recorded.** It used to go
+  in during the return transition's hold, which is before the engine marks the
+  trainer defeated — so loading that save put you back in front of someone who
+  challenged you again with the battle un-won. See Gen1AutoSave 1.19.0.
+
+- **The follower is billboarded under every voxel fork**, not the three that
+  were named in a list. See Gen1Follower 1.7.0.
+
+- **`tools/check.py` gained two guards**, both for faults that shipped. A local
+  read above its `local` is a global read, nil at run time, and compiles
+  perfectly. And `maintained/` is now compared byte for byte against its copy
+  in `modules/`, because a fix typed into one and not the other passes every
+  other check in the file.
+
+
 ## 1.27.3
 
 Carries **Gen1Follower 1.6.2**.

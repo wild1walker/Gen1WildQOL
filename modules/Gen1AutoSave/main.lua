@@ -82,6 +82,11 @@ return function(mod)
     dirty = false,
     due = false,
     inBattle = false,
+    -- Set from battle.ended until the battle's own onFinish has returned --
+    -- the window in which the fight is over and its OUTCOME is not written
+    -- yet.  See requestAfterOutcome.
+    outcomePending = false,
+    outcomeClear = 0,
     saving = false,
     syncWaitUntil = 0,
     syncWasBusy = false,
@@ -420,7 +425,7 @@ return function(mod)
   local function writeWindow(game)
     local ow = game and game.overworld
     if not (ow and ow.player) then return false end
-    if state.inBattle then return false end
+    if state.inBattle or state.outcomePending then return false end
     if scriptRunning(ow) then return false end
     if ow.engaging or ow.emote then return false end
     -- Ahead of screenOver, for the reason quietFrame gives above: a
@@ -450,6 +455,11 @@ return function(mod)
   -- handed control back -- a menu closed, a conversation ended, a battle
   -- finished -- which is a window in its own right, because the player is
   -- standing exactly where the game left them and has not moved yet.
+  -- Declared here, assigned far below where the battle wiring lives: the
+  -- pump calls it and a local declared after its use is a GLOBAL read, which
+  -- is nil.  That exact mistake took the battle UI out in 0.32.3.
+  local releaseOutcome
+
   local function trackStillness(game, dt)
     local ow = game and game.overworld
     local held = state.inBattle or screenOver(game) or scriptRunning(ow)
@@ -457,6 +467,8 @@ return function(mod)
                                 or ow.teleportOut)) or false
     if state.wasHeld and not held then state.settledAt = state.clock end
     state.wasHeld = held and true or false
+
+    if releaseOutcome then releaseOutcome(game, dt, held) end
 
     if ow and ow.player and not held and not ow.player.moving
         and not walking(game, ow) then
@@ -1084,9 +1096,11 @@ return function(mod)
   end
 
   local CHECKPOINTS = {
-    "battle.ended", "pokemon.caught", "pokemon.evolved",
+    "pokemon.caught", "pokemon.evolved",
     "egg.hatched", "trade.completed", "world.blacked_out",
   }
+  -- battle.ended is not in that list.  It is a checkpoint, but not YET -- see
+  -- requestAfterOutcome below.
   -- map.entered is not in that list.  It is a checkpoint only sometimes, and
   -- the engine is the one that knows when -- see enteredBehindAScreen below.
 
@@ -1113,7 +1127,148 @@ return function(mod)
   mod.events:on("battle.started", function()
     state.inBattle = true
   end)
-  mod.events:on("battle.ended", function() state.inBattle = false end)
+  -- ---------- and a battle's outcome is committed AFTER battle.ended
+  --
+  -- The event is emitted while the battle is still tearing down.  What writes
+  -- the OUTCOME runs later, and WHICH thing writes it depends on how the
+  -- battle was started -- which is why the first two attempts at this failed:
+  --
+  --   a line-of-sight trainer   `battle.onFinish` sets
+  --                             save.defeatedTrainers[npc.id] directly
+  --   a SCRIPTED trainer        `onFinish` only STARTS a script runner
+  --                             (OverworldController:restoreBattleContinuation,
+  --                             origin.kind == "script_battle").  The defeat is
+  --                             recorded by the script, after it resumes, past
+  --                             its own text boxes.  onFinish returning means
+  --                             the script has BEGUN.
+  --   a static wild encounter   onFinish, but on a different branch again
+  --
+  -- 0.32.2 waited for the request; 0.32.5 waited for onFinish to return.  Both
+  -- were guesses about which callback owns the write, and a Rocket in a
+  -- hideout is the second row: beaten, saved, and challenging you again.
+  --
+  -- So this does not guess any more.  The hold is released by an OBSERVABLE
+  -- state of the world rather than by a callback: the battle is over, no
+  -- script is running, nothing is on the screen, and the player has had
+  -- control for a moment.  Whatever recorded the outcome has finished by then,
+  -- whichever of the three it was, because all three run before the game hands
+  -- the player the pad back.
+  --
+  -- The cost is the post-battle covered window: a save owed at the end of a
+  -- battle now waits for the dialogue to finish instead of landing in the
+  -- return hold.  That window was the feature; it was also the bug, because it
+  -- is EARLIER than every one of those writes.  Every other covered screen --
+  -- a door, a warp, a cave mouth -- is untouched.
+  local OUTCOME_QUIET = 0.75   -- seconds of a settled world before releasing
+  local OUTCOME_CAP = 10       -- ...and the longest the hold may ever last
+
+  -- ------- and the reading, for the bench
+  --
+  -- Three releases went after "the save is taken before the defeat is
+  -- recorded" and each one was a theory about WHICH callback records it.  This
+  -- stops theorising: count the trainers the save says are beaten when the
+  -- battle ends, count them again on the frame the post-battle save is
+  -- actually written, and show both.  The count going up is the outcome having
+  -- landed first; the count standing still is this bug, caught in the act, on
+  -- a screen rather than in a guess.
+  --
+  -- Counted rather than looked up by id because the id is not on the battle:
+  -- the engine closes over the npc inside onFinish and never publishes it.  A
+  -- count answers the only question being asked -- did anything get recorded
+  -- between these two frames -- without needing to know who.
+  local function defeatedCount(game)
+    local save = game and game.save
+    local beaten = save and save.defeatedTrainers
+    if type(beaten) ~= "table" then return nil end
+    local n = 0
+    for _ in pairs(beaten) do n = n + 1 end
+    return n
+  end
+
+  mod.events:on("battle.ended", function(event)
+    state.inBattle = false
+    state.outcomePending = true
+    state.outcomeClear = 0
+    state.outcomeHeld = 0
+    local battle = event and event.battle
+    state.lastBattleKind = battle and battle.kind or nil
+    state.defeatedAtEnd = defeatedCount(state.game)
+    state.defeatedAtWrite = nil
+    state.holdSeconds = nil
+  end)
+
+  -- Called once a frame from trackStillness, which already computes `held`.
+  function releaseOutcome(game, dt, held)
+    if not state.outcomePending then return end
+    state.outcomeHeld = (state.outcomeHeld or 0) + dt
+    -- `held` is already "the game is doing something": in a battle, a screen
+    -- over the map, a script running, engaging, mid-warp.  That is the whole
+    -- question -- whether the post-battle sequence has finished -- and walking
+    -- is not part of it.  Requiring stillness as well made the hold sticky for
+    -- a player who walks off the moment the dialogue closes, which is most of
+    -- them.
+    local quiet = not held
+    if quiet then
+      state.outcomeClear = (state.outcomeClear or 0) + dt
+    else
+      state.outcomeClear = 0
+    end
+    -- The cap is not a second opinion about the outcome; it is the promise
+    -- that a script which never ends cannot switch autosave off for the rest
+    -- of the session.  It has never been reached in testing and should not be.
+    --
+    -- It does not apply inside a battle, though, and that is not a detail.
+    -- `held` covers a battle, a screen over the map and a running script, and
+    -- the cap is the escape hatch for the two that can wedge.  A battle is not
+    -- one of those: it ends on its own.  Letting the cap fire inside one is
+    -- how a hold left over from the LAST battle -- a player who finishes a
+    -- fight and walks straight into another that runs past OUTCOME_CAP --
+    -- would write a save in the middle of the new fight, which is the one
+    -- place a save must never land.  So the hatch stays shut while a battle
+    -- is up and opens again the moment it is over.
+    local capped = state.outcomeHeld >= OUTCOME_CAP and not state.inBattle
+    if state.outcomeClear >= OUTCOME_QUIET or capped then
+      state.holdSeconds = state.outcomeHeld
+      state.outcomePending = false
+      state.outcomeClear = 0
+      state.outcomeHeld = 0
+      -- The release IS the moment the game handed control back, as far as this
+      -- mod's idea of settled goes: the battle, its dialogue and whatever
+      -- recorded its outcome have all just finished.  Without this the save is
+      -- asked for three quarters of the way through a window that opened when
+      -- the last text box closed -- SETTLE_GRACE is 1.5s -- so a player who
+      -- walks off immediately missed it and waited STILL_FOR instead.  That is
+      -- the autosave that stopped appearing after a battle in 0.32.6.
+      state.settledAt = state.clock
+      if capped then
+        mod.log:warn("a battle never settled; releasing the autosave hold")
+      end
+      if mod.options:get("events") then request() end
+      -- ------- and take it HERE, on this frame
+      --
+      -- Holding the battle's return hold left nothing behind it.  Under the
+      -- default options the idle path is off entirely -- writeWindow's own
+      -- `on_load ~= false` refusal -- so every save goes through a covered
+      -- screen, and the return hold was the only covered screen a battle has.
+      -- Blocking it without putting anything in its place is why the autosave
+      -- stopped appearing after a battle at all.
+      --
+      -- So the release is the window now.  It is the frame the last text box
+      -- closed, which is a screen changing anyway, and it is the earliest
+      -- frame on which the outcome is certainly written -- which is the whole
+      -- point.  loadScreenWrite keeps every other guard it has: due, dirty,
+      -- MIN_GAP, sync settled, nobody walking.
+      local before = state.lastWriteAt
+      loadScreenWrite(game, "battle just finished")
+      -- Only when a save actually landed on this frame: a refused write --
+      -- MIN_GAP, sync busy, somebody walking -- is not a reading about the
+      -- outcome and must not be shown as one.
+      if state.lastWriteAt ~= before then
+        state.defeatedAtWrite = defeatedCount(game)
+      end
+    end
+  end
+
 
   -- ---------- which map changes had a screen in front of them
   --
@@ -1289,7 +1444,14 @@ return function(mod)
     -- this costs one table read and buys the guarantee outright rather than
     -- depending on that staying true.  The veil counter is dropped with it,
     -- so a count left over from before the battle cannot be spent after it.
-    if state.inBattle then
+    -- Never inside a battle, and never in the gap after one where the fight
+    -- is over and its outcome is not recorded yet.  The battle's return hold
+    -- is the most covered screen this mod ever sees, so without this the
+    -- likeliest save in the game is the one taken between the last hit and
+    -- `save.defeatedTrainers[npc.id] = true` -- load it and the trainer you
+    -- just beat walks up and challenges you again.  The veil counter goes
+    -- with it, so a count from before cannot be spent after.
+    if state.inBattle or state.outcomePending then
       state.veiled = 0
       return
     end
@@ -1329,7 +1491,13 @@ return function(mod)
       dirty = state.dirty and true or false,
       veiled = state.veiled or 0,
       inBattle = state.inBattle and true or false,
+      outcomePending = state.outcomePending and true or false,
       sinceWrite = state.clock - state.lastWriteAt,
+      -- the bench's reading; see defeatedCount
+      battleKind = state.lastBattleKind,
+      holdSeconds = state.holdSeconds,
+      defeatedAtEnd = state.defeatedAtEnd,
+      defeatedAtWrite = state.defeatedAtWrite,
     }
   end
 

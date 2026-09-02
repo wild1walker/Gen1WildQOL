@@ -1,8 +1,14 @@
+-- The host every battle overlay in this bundle draws through.
+--
+-- One wrap of `battle.draw` rather than one per overlay, and one place that
+-- works out WHERE an overlay is drawing: the flat 160x144 GB frame, or the
+-- world canvas a voxel mod put the battle on.  See runtime/voxel.lua for why
+-- that second question has more than two answers and why "no" is the default.
+
 local M = {}
-local VOXEL_SNAP_STATE = "__qolDramaticShapeHudSnapped"
-local VOXEL_SNAP_HOOK = "__qolHudSnapHook"
 
 function M.new(mod)
+  local voxel = mod.voxel
   local overlays = {}
   local wrapped = setmetatable({}, { __mode = "k" })
   local installed = false
@@ -12,32 +18,34 @@ function M.new(mod)
     overlays[#overlays + 1] = overlay
   end
 
+  -- Wrap the voxel mod's `snapHUDs` so its per-frame answer is readable off
+  -- the battle.  Tried at the start of each battle rather than on
+  -- `mods.loaded`, and that is not a preference: `install` is itself called
+  -- FROM a mods.loaded handler (bundle_common.battleService), so a second
+  -- subscription to the event being dispatched is a subscription that may
+  -- never be called.  A battle is later than mods.loaded by any route, which
+  -- is all this needs -- and retrying per battle also picks up a voxel mod
+  -- that arrived late.
+  --
+  -- Cheap after the first success: the provider is memoised and the wrap tags
+  -- the table it is on, so every call after the first is a table lookup.  With
+  -- no voxel mod -- the ordinary case -- it is a lookup that finds nothing.
+  local hooked = false
+  local function hookHudSnap()
+    if hooked or not voxel then return end
+    local ok, result = pcall(voxel.installHudSnapHook)
+    if ok and result then hooked = true end
+  end
+
   function service:install()
     if installed then return end
     installed = true
-    mod.events:once("mods.loaded", function()
-      if type(mod.find) ~= "function" then return end
-      local handle = mod.find("DRAMATIC_SHAPE")
-      local lib = handle and handle.exports and handle.exports.lib
-      if not lib or type(lib.require) ~= "function" then return end
-      local ok, OverworldBattle = pcall(lib.require, "OverworldBattle")
-      if not ok or type(OverworldBattle) ~= "table"
-         or type(OverworldBattle.snapHUDs) ~= "function"
-         or rawget(OverworldBattle, VOXEL_SNAP_HOOK) then return end
-      local snapHUDs = OverworldBattle.snapHUDs
-      OverworldBattle.snapHUDs = function(battle, ...)
-        if battle then battle[VOXEL_SNAP_STATE] = false end
-        local snapped = snapHUDs(battle, ...)
-        if battle then battle[VOXEL_SNAP_STATE] = snapped == true end
-        return snapped
-      end
-      OverworldBattle[VOXEL_SNAP_HOOK] = true
-    end)
     mod.events:on("battle.started", function(event)
       local battle = event and event.battle
       if not battle or wrapped[battle] or type(battle.draw) ~= "function" then
         return
       end
+      hookHudSnap()
 
       local states = {}
       local failed = {}
@@ -57,19 +65,13 @@ function M.new(mod)
         if sx == 0 and sy == 0 and fx and fx.shake and fx.shake > 0 then
           sx = self.frame % 4 < 2 and 2 or -2
         end
-        local voxel3dBattleData = rawget(self, "dramaticShapeShot")
-        if type(voxel3dBattleData) ~= "table" or not voxel3dBattleData.canvas
-           or type(voxel3dBattleData.scale) ~= "number"
-           or voxel3dBattleData.scale <= 0
-           or type(voxel3dBattleData.pw) ~= "number"
-           or type(voxel3dBattleData.ph) ~= "number"
-           or type(voxel3dBattleData.lx) ~= "number"
-           or type(voxel3dBattleData.ly) ~= "number" then
-          voxel3dBattleData = nil
-        end
-        if rawget(self, VOXEL_SNAP_STATE) == false then
-          voxel3dBattleData = nil
-        end
+        -- Set ONLY while the HUDs are genuinely on the world canvas this
+        -- frame.  An overlay reads it as "follow the HUD onto the canvas",
+        -- and nil as "draw where you always drew" -- which is the answer with
+        -- no voxel mod, and equally the answer under a fork that leaves the
+        -- HUDs in the GB frame.  Deciding this once here is why no overlay
+        -- has to know a voxel mod exists.
+        local voxel3dBattleData = voxel and voxel.snappedShot(self) or nil
         local context = {
           sx = sx,
           sy = sy,
