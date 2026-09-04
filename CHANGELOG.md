@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.29.1
+
+- **TRAINER REMATCH stopped answering for the engine, which is what was
+  locking the ROCKET HIDEOUT lift.** Beat the ROCKET who guards it, talk to
+  him, and you got `Want to battle again?` instead of his own line -- and his
+  own line is the only thing in the game that puts the LIFT KEY on the floor.
+  The ball starts hidden in the map objects and the first talk after the win
+  is what reveals it (`CheckAndSetEvent EVENT_ROCKET_DROPPED_LIFT_KEY` /
+  `ShowObject ROCKETHIDEOUTB4F_LIFT_KEY`). With the row on, that talk never
+  ran. The lift stayed locked: no SILPH SCOPE, no POKeMON TOWER, no
+  GIOVANNI, on a save that gave no sign anything had gone wrong.
+
+  The cause is one line of precedence. The wrap on `world.talk` ANSWERED the A
+  press itself for any beaten trainer with an `after` line, and that line is
+  the *last* thing `talkTo` reaches: a hand-ported map script wins first
+  (`OverworldController.lua:3152`), then an item ball, then a static
+  encounter, and only then the trainer branches. The offer was not sitting on
+  the end of a conversation. It was replacing one.
+
+  **The engine says the line now, and the question goes on the end of it.**
+  `next()` runs first and in full, so whichever line the engine would have
+  printed is the line you get, and every side effect it carries still happens.
+  Whether a question may follow is asked of the state stack rather than of a
+  list of trainers: the talk pushed exactly one plain box, and when it closes
+  the engine's own `onDone` leaves the stack where the talk found it. Then the
+  engine had one line to say and has said it.
+
+  **So the rule is: once they have handed over what they owe you, they are a
+  rematch.** A gym leader whose TM did not fit in your bag at the victory
+  re-runs the hand-over on the next talk -- a *chain* of boxes, each pushing
+  the next from its own `onDone` -- so the stack is deeper when we look and
+  nothing is offered. Take the TM and the same leader answers with one advice
+  line, which ends where it started: rematch. The ROCKET drops the LIFT KEY
+  and *then* asks whether you want to go again. No names anywhere in it, so
+  the trainer nobody has found yet is behind the same rule.
+
+- **Gym leaders can be rematched at all now**, which is a consequence of the
+  same change rather than a second one. Leaders are not `def_trainers`
+  entries, so they have no `after` line, so the old path -- which needed one
+  -- could never offer them a rematch whatever the module's own comments said.
+  With the engine speaking there is no header to look up: a leader you have
+  taken everything from is an ordinary beaten trainer with an ordinary line.
+  The badge stays exactly once yours; no part of the victory path runs on a
+  rematch, and `MATCH LEVELS` makes a leader you left behind a real fight
+  again.
+
+  `tests/rematch_test.lua` is 115 assertions on a fake that models the state
+  stack and the engine's own talk: the chain that still owes you a TM, the
+  advice line that does not, the LIFT KEY revealed before anything is asked,
+  a menu, a box already asking a question, a box that closes on a timer, and
+  a script that pushes nothing at all.
+
 ## 1.29.0
 
 Two rules about machines, as two rows of their own. Both ship **on**, both are

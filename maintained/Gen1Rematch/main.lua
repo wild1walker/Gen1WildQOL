@@ -2,11 +2,12 @@
 --
 -- ------- the shape of it
 --
--- A beaten trainer already has something to say.  `def_trainers` gives every
--- one of them an `after` line, and walking up to a trainer you have beaten
--- prints it (src/world/OverworldController.lua:3130-3137) -- that is the
--- whole of what talking to them does today.  So the rematch is offered where
--- the conversation already ends, rather than as a new thing on the screen:
+-- A beaten trainer already has something to say.  Walking up to one prints
+-- it -- an `after` line off `def_trainers` for most of them
+-- (src/world/OverworldController.lua:3230-3237), a hand-ported script's own
+-- line for the ones the cartridge gave a script to.  So the rematch is
+-- offered where the conversation already ends, rather than as a new thing on
+-- the screen:
 --
 --   A through the line   ->  "Want to battle again?"  ->  YES / NO
 --   B out of the line    ->  nothing, exactly as before
@@ -32,6 +33,56 @@
 -- no map's onVictory script fires again.  A gym leader is an ordinary trainer
 -- on this path and can be fought again for the practice; the badge is already
 -- yours and stays exactly once yours.
+--
+-- ------- whose talk this is, and when it is finished
+--
+-- The engine says the line.  Every one of them, out of `talkTo`, in the
+-- order `talkTo` already resolves: a hand-ported map script wins first
+-- ("hand-ported scripts always win", OverworldController.lua:3152), then an
+-- item ball, then a static encounter, and only then the trainer branches
+-- (:3225-3237).  This wrap calls next() and lets all of that happen, then
+-- hangs the question off the box the engine pushed.  It used to answer the A
+-- press ITSELF for any beaten trainer with an `after` line, which put it in
+-- front of every one of those branches: the offer was not sitting on the end
+-- of a conversation, it was replacing one.
+--
+-- A replaced conversation is not a missing line, it is a missing item.  The
+-- ROCKET on ROCKET_HIDEOUT_B4F is a beaten trainer with an after-line whose
+-- hand-ported talk is the only thing in the game that puts the LIFT KEY on
+-- the floor: the ball starts hidden in the map objects and the first talk
+-- after the win is what reveals it (CheckAndSetEvent
+-- EVENT_ROCKET_DROPPED_LIFT_KEY / ShowObject ROCKETHIDEOUTB4F_LIFT_KEY,
+-- data/scripts/story3.lua:387-408).  Talking to a trainer you have beaten is
+-- where this game hands over what it still owes you, and he is not the only
+-- one: a gym leader re-runs the TM give when your bag was full at the
+-- victory (retryTmGive, data/scripts/gyms.lua:28-38), the MT MOON SUPER
+-- NERD's line is what turns the fossils on.
+--
+-- ------- one box, and the stack where the talk found it
+--
+-- So the question is not "may we speak for this trainer" but "has the engine
+-- finished speaking", and it is asked of the stack rather than of a list of
+-- names:
+--
+--   the talk pushed exactly one box, and it is a plain one -- no YES/NO of
+--   its own, no timer closing it -- and when that box closes, the engine's
+--   own `onDone` leaves the stack exactly where the talk found it.
+--
+-- Then the engine had one line to say and has said it, and the offer goes on
+-- the end of it.  Anything else is the engine still working: a gym leader
+-- who still owes you a TM answers with a CHAIN of boxes, each pushing the
+-- next from its own onDone (rewardChain, OverworldController.lua:3917-3930),
+-- so the stack is one deeper when we look and there is no offer on that
+-- talk.  Hand the TM over and the same leader answers with one advice line,
+-- which ends where it started -- and the rematch is there.  A farewell that
+-- fades, a menu, a script that runs its rows over frames: all the same
+-- answer, for the same reason, without this file knowing what any of them
+-- are.
+--
+-- That is the whole gate.  It is not a denylist of grunts, so the trainer
+-- nobody has thought of yet is behind it too; and it is not a ban on bosses,
+-- so a gym leader you have taken everything from is an ordinary beaten
+-- trainer with an ordinary line, and can be fought again for the practice.
 --
 -- ------- the levels
 --
@@ -115,33 +166,40 @@ return function(mod)
     return text
   end
 
-  -- ------- is this a trainer with a rematch in them?
+  -- ------- is this a trainer talk at all?
   --
-  -- Answers the line to print, or nil for "not ours" -- and nil is the
-  -- ordinary answer.  Every gate here is one the vanilla path checks in the
-  -- same order at OverworldController.lua:3125-3137, so a trainer this says
-  -- yes to is exactly a trainer whose after-line the engine was about to
-  -- print anyway.  One that says no falls through and the engine does what it
-  -- always did.
-  local function afterLine(ow, npc)
+  -- Asked BEFORE next(), because after it the answer has moved: a trainer
+  -- still standing is beaten by the time the engine hands control back.  The
+  -- item ball and the static encounter are the two answers `talkTo` reaches
+  -- before either trainer branch (:3163, :3199), screened here so this never
+  -- hangs a question off one of them -- "0" among them, which is pokered's
+  -- ITEM_NONE sentinel and a plain text object, exactly as the engine reads
+  -- it.
+  local function talkingToABeatenTrainer(ow, npc)
     local def = npc and npc.def
-    if type(def) ~= "table" or not def.trainerClass then return nil end
-    if type(ow.trainerDefeated) ~= "function" then return nil end
+    if type(def) ~= "table" or not def.trainerClass then return false end
+    if def.item and def.item ~= 0 and def.item ~= "0" then return false end
+    if def.pokemon then return false end
+    if type(ow.trainerDefeated) ~= "function" then return false end
     local asked, beaten = pcall(ow.trainerDefeated, ow, npc)
-    if not asked or not beaten then return nil end
+    return (asked and beaten) and true or false
+  end
 
-    local game = mod.world and mod.world.game
-    local data = game and game.data
-    local label = ow.map and ow.map.def and ow.map.def.label
-    if type(data) ~= "table" or type(data.trainerHeader) ~= "function" then
-      return nil
-    end
-    if type(label) ~= "string" then return nil end
-
-    local read, header = pcall(data.trainerHeader, data, label, def.index)
-    if not read or type(header) ~= "table" or not header.after then return nil end
-    local text = data.text and data.text[header.after]
-    return type(text) == "string" and text or nil
+  -- A box a button ends, and nothing more.  `choice` is a question already
+  -- being asked and `auto` is a box that closes on a timer, and neither is
+  -- something to hang "which button did you leave on?" off.  `stay` belongs
+  -- to whoever pushed it -- it is the idiom for putting something on top of
+  -- a box (TextBox.lua:118-121), so a box carrying one is a conversation
+  -- still being built.
+  --
+  -- The identity check is the metatable rather than a duck-type: a state
+  -- that merely has pages is not a TextBox, and pushing our question onto
+  -- something else's onDone field would be a bug nobody would find.
+  local function plainBox(state)
+    local ok, TextBox = pcall(require, "src.render.TextBox")
+    if not ok or type(TextBox) ~= "table" then return false end
+    if getmetatable(state) ~= TextBox then return false end
+    return not (state.choice or state.auto or state.stay)
   end
 
   -- ------- the battle
@@ -311,50 +369,74 @@ return function(mod)
 
   -- ------- the A press on a beaten trainer
   --
-  -- `world.talk` is the A press on an object before the map's text tables get
-  -- it, and a wrap that does not call next() owns the interaction.  This one
-  -- owns exactly the case the engine would have spent on a single TextBox,
-  -- and reproduces it: freeze the object, turn it to face you, print the
-  -- line.  Everything else -- every trainer still standing, every non-trainer,
-  -- every trainer with nothing to say -- goes straight through.
+  -- `world.talk` is the A press on an object before the map's text tables
+  -- get it.  A wrap that does not call next() OWNS the interaction, and this
+  -- one deliberately does not: next() runs first and in full, so the line
+  -- that gets printed is whichever line the engine would have printed and
+  -- every side effect it carries -- a revealed LIFT KEY among them -- still
+  -- happens.  All this adds is a question on the end of the box, and only
+  -- when that box was the end of it.
   mod.hooks:wrap("world.talk", function(next, ow, npc)
     if not on("enabled") then return next(ow, npc) end
-
-    local line = afterLine(ow, npc)
-    if not line then return next(ow, npc) end
+    -- Asked now: after next() this trainer may have just been beaten, and a
+    -- battle you have this second finished is not a rematch.
+    if not talkingToABeatenTrainer(ow, npc) then return next(ow, npc) end
 
     local game = mod.world and mod.world.game
-    local ok, TextBox = pcall(require, "src.render.TextBox")
-    if not ok or type(TextBox) ~= "table" or not (game and game.stack) then
-      return next(ow, npc)
-    end
+    local stack = game and game.stack
+    if not stack or type(stack.top) ~= "function" then return next(ow, npc) end
 
-    -- talkTo freezes the object it is talking to and thaws it on the way out
-    -- (OverworldController.lua:3048-3049).  This holds the freeze all the way
-    -- through the prompt and the battle instead, so a trainer cannot walk off
-    -- mid-conversation with their own rematch.
-    npc.frozen = true
-    local released = false
-    local function release()
-      if released then return end
-      released = true
-      npc.frozen = false
-    end
-    if ow.player and type(npc.facePlayer) == "function" then
-      pcall(npc.facePlayer, npc, ow.player)
-    end
+    -- What the stack looked like before the engine said anything.  Identity,
+    -- not a count: it is the same reading either way and it does not reach
+    -- into the stack's own array to get it.
+    local under = stack:top()
 
-    game.stack:push(TextBox.new(game, line, function()
+    local result = next(ow, npc)
+
+    -- One box, plain, and the engine's own.  Two boxes, a menu, a battle or
+    -- nothing at all are all "the engine is not finished", and none of them
+    -- is ours to write on.
+    local box = stack:top()
+    if box == under or not plainBox(box) then return result end
+
+    local spoken = box.onDone
+    box.onDone = function()
+      -- The engine's own callback first, always: it is the unfreeze on the
+      -- vanilla path and the LIFT KEY's ShowObject on the ROCKET's, and it
+      -- runs whether or not a rematch is offered afterwards.
+      if spoken then spoken() end
+
+      -- And now the test that makes this safe.  If that callback pushed
+      -- something, the conversation is still going -- the next box of a gym
+      -- leader's TM hand-over, a farewell mid-fade -- and the offer is not
+      -- made on this talk.  It will be there on the next one, once the
+      -- engine has nothing left to hand over and answers with one line.
+      if stack:top() ~= under then return end
+
       -- Whichever button closed the box is still this frame's press.  B is a
       -- way out that costs nothing and asks nothing, which is the point: the
       -- prompt only ever appears for someone who read to the end and pressed
       -- on.  Checked before A rather than after, so a frame carrying both is
       -- read as the cancel.
       local input = game.input
-      if input and input.wasPressed and input:wasPressed("b") then
-        return release()
+      if input and input.wasPressed and input:wasPressed("b") then return end
+
+      -- talkTo freezes the object it is talking to and thaws it on the way
+      -- out (OverworldController.lua:3048-3049), and that thaw has just run
+      -- in `spoken`.  Take the freeze back for the length of the prompt and
+      -- the battle, so a trainer cannot walk off mid-conversation with their
+      -- own rematch.
+      npc.frozen = true
+      local released = false
+      local function release()
+        if released then return end
+        released = true
+        npc.frozen = false
       end
+
       offer(ow, npc, release)
-    end))
+    end
+
+    return result
   end)
 end
