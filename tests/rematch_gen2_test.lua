@@ -189,8 +189,14 @@ local logged = {}
 local prize, scale, enabled = true, true, true
 local ctx
 ctx = {
+  -- `info` as well as warn/error.  main.lua hands the arm `mod.log`, which
+  -- has all three; this stand-in had two, so the first call to log:info on
+  -- the refusal path raised inside the pcall in step() and the offer
+  -- vanished with nothing said -- a stand-in narrower than the real thing,
+  -- failing in the one place the feature was already being reported broken.
   log = { warn = function(_, f, ...) logged[#logged + 1] = tostring(f) end,
-          error = function(_, f, ...) logged[#logged + 1] = tostring(f) end },
+          error = function(_, f, ...) logged[#logged + 1] = tostring(f) end,
+          info = function(_, f, ...) logged[#logged + 1] = tostring(f) end },
   say = function(text) return text end,
   matched = function(_, party)
     -- MATCH LEVELS, stood up as "everybody gains ten", which is enough to
@@ -203,7 +209,8 @@ ctx = {
   end,
   text = { ASK = "Want to battle\nagain?",
            PRICED = "Want to battle\nagain?\fThat will be\n%d. OK?",
-           BROKE = "You don't have\nenough money." },
+           BROKE = "You don't have\nenough money."
+             .. "\fA rematch costs\n%d." },
   enabled = function() return enabled end,
   wantPrize = function() return prize end,
   wantScale = function() return scale end,
@@ -317,7 +324,12 @@ end
 do
   local w = scene(10)
   w:interactBody(); w.vm.busy = false; w:step()
-  eq(w.said[1], "You don't have\nenough money.", "a price you cannot pay is said so")
+  -- The refusal QUOTES the price.  It used to say only that the money was
+  -- short, which is what made "it always says I can't afford it" impossible
+  -- to answer from a report: a price nobody can pay and a purse read out of
+  -- the wrong field produce the identical sentence.
+  eq(w.said[1], "You don't have\nenough money.\fA rematch costs\n160.",
+     "a price you cannot pay is said so, and named")
   w.pendingText()
   eq(w.choicebox, nil, "and no question is asked")
   eq(w.fought, nil, "and nothing is fought")

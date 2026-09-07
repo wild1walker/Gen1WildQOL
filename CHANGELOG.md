@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.31.1
+
+- **A rematch you cannot afford now says what it costs.** "You don't have
+  enough money." on its own is the cart's line and it is unanswerable: a price
+  genuinely out of reach and a purse the mod is failing to read produce the
+  identical sentence, and both have now happened here. The refusal carries the
+  quote on a second page, in the same shape the offer gives it, and the price
+  and the purse go to the log beside it — on Gold with the field the purse was
+  read from, so a report can tell "too expensive" from "read as zero" without
+  another round trip.
+
+  This is a diagnostic, not a second fix. 1.31.0's purse fix is in the shipped
+  archive and correct against a real Gold save; if the refusal you see is still
+  the bare one-line version, the build being played is older than 1.31.0.
+
 ## 1.31.0
 
 Two bug reports, one from each game.

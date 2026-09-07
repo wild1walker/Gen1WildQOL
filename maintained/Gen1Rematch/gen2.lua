@@ -213,7 +213,16 @@ function Gen2.offer(ctx, record)
     ctx.wantScale(), ctx.game)
   local purse = purseOf(ctx.game and ctx.game.save)
   if price > purse then
-    return world:showText(ctx.say(ctx.text.BROKE), function() ctx.done() end)
+    -- Logged as well as said.  A refusal that names only itself is what made
+    -- the first report of this unanswerable: "it always says no" cannot
+    -- separate a price nobody can afford from a purse being read out of the
+    -- wrong field, and both have happened here.
+    local save = ctx.game and ctx.game.save
+    ctx.log:info("rematch refused: it costs %d and the purse holds %d "
+      .. "(save.player is %s)", price, purse,
+      type(save) == "table" and type(save.player) or "unreachable")
+    return world:showText(ctx.say(ctx.text.BROKE):format(price),
+                          function() ctx.done() end)
   end
 
   local ask = price > 0 and ctx.say(ctx.text.PRICED):format(price)

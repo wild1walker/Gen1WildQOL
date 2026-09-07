@@ -475,8 +475,14 @@ do
   w.talk()
   w.close()
   eq(#boxes, 2, "a box, but not the question")
-  eq(boxes[2].text, "You don't have\nenough money.",
-     "the mart's own line, for the same reason")
+  -- The mart's own line, for the same reason -- and then the quote, because
+  -- a refusal that names only itself is unanswerable: "it always says I
+  -- can't afford it" reads identically whether the price is out of reach or
+  -- the purse is being read out of the wrong field, and on Gold it was the
+  -- second.  479 is one short of the 480 the second page names.
+  eq(boxes[2].text,
+     "You don't have\nenough money.\fA rematch costs\n\194\165480.",
+     "the mart's own line, and the price it is short of")
   ok(boxes[2].opts == nil, "no YES / NO on it")
 
   w.close()
