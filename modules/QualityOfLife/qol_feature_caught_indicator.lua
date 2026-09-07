@@ -62,20 +62,48 @@ local feature = {
   },
 }
 
+-- ------- one mark per ROW-RUN, not one per pixel
+--
+-- The pixels are drawn one at a time because a run can change colour along
+-- its length -- "xdldddx" is three of them.  The true-colour MARK must not
+-- be, and this used to emit one per pixel: thirty-seven 1x1 rects for a 7x7
+-- ball.  Two things came of that, and both were reported together.
+--
+--   * A mark is a seam, and DARK paints a one-pixel skirt round every one of
+--     them (Gen1WildUI runtime/theme.lua, watchArt).  The skirt is suppressed
+--     where it would land inside another rect ALREADY recorded -- so a pixel
+--     skirted its not-yet-marked neighbours, and the ball's transparent
+--     corners, which are never marked at all, were painted dark and stayed
+--     that way.  A Poke Ball came out a dark rounded blob.
+--   * That theme keeps at most ART_CAP = 40 art rects a frame, and drops the
+--     rest.  Thirty-seven of the forty went on this icon, so the next mark in
+--     the frame -- the EXP bar's, one rect -- fell off the end, lost its
+--     ART_PAGE zone and came back unthemed.  "The caught marker looks broken
+--     and the exp bar looks broken" was one bug.
+--
+-- Every row of both balls is drawn from contiguous runs, so marking runs
+-- costs seven rects for the Gen 1 ball and nine for the Gen 2 one, covers
+-- exactly the pixels drawn and no transparent ones, and leaves the skirt to
+-- fall where it belongs: round the ball's own silhouette.
 local function drawBallRows(rows, x, y, scale, colors, mark)
   local g = love.graphics
   scale = scale or 1
+  local PaletteFX = mark and require("src.render.PaletteFX") or nil
   for py, row in ipairs(rows) do
-    for px = 1, #row do
-      local color = colors[row:sub(px, px)]
+    local dotY = y + (py - 1) * scale
+    local runFrom = nil
+    for px = 1, #row + 1 do
+      local color = px <= #row and colors[row:sub(px, px)] or nil
       if color then
-        local dotX = x + (px - 1) * scale
-        local dotY = y + (py - 1) * scale
         g.setColor(color[1] / 255, color[2] / 255, color[3] / 255, 1)
-        g.rectangle("fill", dotX, dotY, scale, scale)
-        if mark then
-          require("src.render.PaletteFX").markTrueColor(dotX, dotY, scale, scale)
+        g.rectangle("fill", x + (px - 1) * scale, dotY, scale, scale)
+        runFrom = runFrom or px
+      elseif runFrom then
+        if PaletteFX then
+          PaletteFX.markTrueColor(x + (runFrom - 1) * scale, dotY,
+                                  (px - runFrom) * scale, scale)
         end
+        runFrom = nil
       end
     end
   end

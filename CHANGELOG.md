@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.32.1
+
+- **Under DARK, the caught marker is a POKéBALL again — and the EXP bar comes
+  back with it.** Reported as two things; it was one.
+
+  The ball is drawn a pixel at a time, because a row changes colour along its
+  length. It was also *marked* a pixel at a time: **37 separate 1x1
+  true-colour rects** for a 7x7 icon. DARK paints a one-pixel skirt round every
+  mark, suppressed only where it would land inside a rect already recorded — so
+  each pixel skirted its not-yet-marked neighbours, and the ball's transparent
+  corners, which are never marked at all, were painted dark and stayed dark. A
+  POKéBALL came out a dark rounded blob.
+
+  The same 37 rects also emptied the theme's budget. It keeps at most **40** art
+  rects a frame and drops the rest, so the next mark in the frame — the EXP
+  bar's, a single rect — fell off the end, lost the zone that themes it, and
+  came back looking broken. One icon was spending 37 of the frame's 40.
+
+  The ball now reports **one rect per contiguous row-run**: seven for the Gen 1
+  ball, nine for the Gen 2 one, covering exactly the pixels drawn and no
+  transparent ones. The skirt falls round the ball's own silhouette, which is
+  what it was for.
+
 ## 1.32.0
 
 Two TRAINER REMATCH fixes on Gold, and both change what happens in a fight.
