@@ -37,6 +37,30 @@ function Bundle.install(mod, spec, features)
   local Registry = assert(loadRuntime("registry"), "runtime/registry.lua did not load")
   local Menu = assert(loadRuntime("menu"), "runtime/menu.lua did not load")
   local Claims = assert(loadRuntime("claims"), "runtime/claims.lua did not load")
+
+  -- Before anything else, and before any feature: a Gen 2 cart's save.
+  --
+  -- src/core/gen2/Save.lua names its file out of the VERSION alone, so a cart
+  -- on Gold, Silver or Crystal reads and writes the base game's playthrough
+  -- -- and its first save registers a slot in the base game's registry on the
+  -- way.  Gen 1 is unaffected: it saves through SaveData, which is already
+  -- cart-scoped, which is why only the Crystal cart shows it.
+  --
+  -- This is bundle scope rather than a feature for the same reason
+  -- runtime/settings.lua is: it has to hold whichever rows the player has
+  -- switched on, and it has to be up before the title screen asks whether a
+  -- save exists.  It is a no-op on Gen 1, outside a cart, and if the seam it
+  -- needs is missing.  See runtime/cartsave2.lua.
+  local CartSave2 = loadRuntime("cartsave2")
+  if type(CartSave2) == "table" then
+    local ok, installed, why = pcall(CartSave2.install)
+    if not ok then
+      mod.log:warn("cart save scoping failed: %s", tostring(installed))
+    elseif not installed then
+      mod.log:warn("cart save scoping stood down: %s", tostring(why))
+    end
+  end
+
   -- Optional, and deliberately so: a bundle installed outside a sealed cart
   -- needs none of it, and a tree built before this file existed should lose
   -- the remembering rather than the boot.
@@ -274,7 +298,7 @@ function Bundle.install(mod, spec, features)
   -- Which voxel mod this bundle found, and whether that one moves the battle
   -- HUDs onto its world canvas -- the one thing the four forks disagree about
   -- and the thing everything drawn beside a HUD turns on.  Published for the
-  -- diagnostic: nothing in the bundle reads it, and a build standing beside
+  -- nightly bench: nothing in the suite reads it, and a build standing beside
   -- no voxel mod answers nil rather than nothing, so a caller never has to
   -- know whether the resolver is there.
   mod.exports.voxelProbe = function()

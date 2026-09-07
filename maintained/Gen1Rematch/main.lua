@@ -131,6 +131,44 @@
 -- the engine paid is put back afterwards.  Off is a rematch with no money in
 -- it at all, in either direction.
 
+-- Which cartridge this is.  Cached: the answer cannot change inside a boot,
+-- and this is read on the install path only.
+local isGen2
+local function gen2()
+  if isGen2 == nil then
+    isGen2 = false
+    local okV, GameVersion = pcall(require, "src.core.GameVersion")
+    if okV and type(GameVersion) == "table"
+        and type(GameVersion.generation) == "function" then
+      local okCall, generation = pcall(GameVersion.generation)
+      isGen2 = okCall and generation == 2
+    end
+  end
+  return isGen2
+end
+
+-- A sibling file, loaded through the mod's own reader so it comes out of the
+-- installed bundle rather than off a path this file guessed.
+local function part(mod, name)
+  local source, readError = mod:read(name)
+  if not source then
+    mod.log:error("%s is missing (%s) -- reinstall the mod", name,
+      tostring(readError))
+    return nil
+  end
+  local chunk, compileError = load(source, "@" .. tostring(mod.path) .. "/" .. name)
+  if not chunk then
+    mod.log:error("%s did not compile: %s", name, tostring(compileError))
+    return nil
+  end
+  local ok, value = pcall(chunk)
+  if not ok then
+    mod.log:error("%s did not load: %s", name, tostring(value))
+    return nil
+  end
+  return value
+end
+
 return function(mod)
 
   -- Two pages, closing on the mart's own line (src/ui/ShopMenu.lua:90), so
@@ -376,6 +414,47 @@ return function(mod)
   -- every side effect it carries -- a revealed LIFT KEY among them -- still
   -- happens.  All this adds is a question on the end of the box, and only
   -- when that box was the end of it.
+  -- ------- Gold, Silver and Crystal
+  --
+  -- Same feature, and the same three rows above drive it; every seam below
+  -- this point is Red's and none of them exists there.  `world.talk` is
+  -- raised from src/world/OverworldController.lua and nowhere else, the talk
+  -- is a script on the VM rather than one box on the stack, and the battle is
+  -- World:startScriptedBattle rather than BattleState.newTrainer.  gen2.lua
+  -- is the same feature written against those, and it returns here once it is
+  -- installed so the Gen 1 wrap below never registers on a Gold boot.
+  if gen2() then
+    local Gen2 = part(mod, "gen2.lua")
+    if type(Gen2) ~= "table" or type(Gen2.install) ~= "function" then
+      mod.log:error("no Gen 2 arm; TRAINER REMATCH is off on this cartridge")
+      return
+    end
+    local ctx = {
+      game = mod.world and mod.world.game,
+      log = mod.log,
+      say = say,
+      matched = matched,
+      text = { ASK = ASK, PRICED = PRICED, BROKE = BROKE },
+      enabled = function() return on("enabled") end,
+      wantPrize = function() return on("prize") end,
+      wantScale = function() return on("scale") end,
+      -- The same latch the Gen 1 path uses, and for the same reason: MATCH
+      -- LEVELS rides `trainer.party`, a hook every battle in the game runs
+      -- through, so it is armed for the length of this feature's own battle
+      -- call and is otherwise a straight pass.
+      arm = function(value) scaling = value end,
+      done = function() end,
+    }
+    -- ctx.game is refreshed from the World itself on every frame the arm
+    -- looks at (gen2.lua's step patch), because the World is the one thing
+    -- that certainly knows its own game -- `mod.world` is not up yet at
+    -- install time, and an event to wait for it would be a second thing to
+    -- keep right.
+    local installed, problem = Gen2.install(ctx)
+    if not installed then mod.log:warn("%s", tostring(problem)) end
+    return
+  end
+
   mod.hooks:wrap("world.talk", function(next, ow, npc)
     if not on("enabled") then return next(ow, npc) end
     -- Asked now: after next() this trainer may have just been beaten, and a

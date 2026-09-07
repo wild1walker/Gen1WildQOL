@@ -45,9 +45,32 @@ return function(mod)
     return worldApi and worldApi.overworld and worldApi:overworld() or nil
   end
 
+  -- ------- which sprite table, and it is not the obvious one on Gold
+  --
+  -- A Gen 2 boot has TWO, and they are different tables holding the same
+  -- data:
+  --
+  --   data.sprites       what src/core/Data.lua loads, under the Gen 1 key
+  --   data.gen2Sprites   what Game2 loads separately at :1044, "namespaced so
+  --                      nothing collides with the Gen 1 keys of the same
+  --                      idea"
+  --
+  -- `World:dataTable("gen2Sprites", ...)` and `PartyMenu.new` both read the
+  -- SECOND one, so it is the second one every overworld NPC and every party
+  -- icon is actually built from.  Preferring `sprites` here therefore rewrote
+  -- a table nothing draws from: the map POKeMON arm has been writing this
+  -- mod's sheets into a copy since it was written, which is why they kept the
+  -- cart's icons however the timing was fixed.
+  --
+  -- The FOLLOWER hid it.  It never depended on the record reaching the world
+  -- -- syncLiveFollowerDef rebuilds its SpriteRenderer straight from
+  -- getFollowerImage -- so it looked right while everything that DOES depend
+  -- on the record looked wrong.
   local function spritesFor(game)
     local data = game and game.data
-    return data and (data.sprites or data.gen2Sprites) or nil
+    if not data then return nil end
+    if isGen2 then return data.gen2Sprites or data.sprites end
+    return data.sprites or data.gen2Sprites
   end
 
   -- Unique Menu Icons deliberately owns the party icon column when both mods
@@ -174,6 +197,16 @@ return function(mod)
     OMASTAR=139, KABUTO=140, KABUTOPS=141, AERODACTYL=142, SNORLAX=143, ARTICUNO=144,
     ZAPDOS=145, MOLTRES=146, DRATINI=147, DRAGONAIR=148, DRAGONITE=149, MEWTWO=150, MEW=151
   }
+
+  -- Two names the two cartridges spell differently.  This table is Red's, and
+  -- Gold's `speciesOrder` writes an apostrophe and a full stop as underscores
+  -- -- FARFETCH_D and MR__MIME, the second with two.  Both resolve anyway,
+  -- through the `game.data.pokemon` fallback in dexForSpecies below, but only
+  -- once the game's data is up; a lookup before that answered nil and the
+  -- POKeMON silently kept the cart's art.  Named here so the answer does not
+  -- depend on when it is asked.
+  speciesToDex.FARFETCH_D = speciesToDex.FARFETCHD
+  speciesToDex.MR__MIME = speciesToDex.MR_MIME
 
   local MAX_FOLLOWER_DEX = 251
 
@@ -624,6 +657,93 @@ return function(mod)
   -- mod.game exists, so the Pokedex-derived size -- the one thing that needs
   -- the loaded game -- is filled in here instead, on map entry and whenever
   -- an option moves.
+  -- ------- the OTHER half of Gold's overworld POKeMON
+  --
+  -- The `SPRITE_POKEMON_*` block ($80 up) is the mon dolls: SpriteMons rows
+  -- that already name a species, which the arm below rewrites.  It is not all
+  -- of them.  The OverworldSprites half below $60 carries POKeMON too --
+  -- SUDOWOODO on Route 36 among them -- as ordinary walking sheets with no
+  -- `species` field at all, and those kept the cart's art.
+  --
+  -- Red needed a hand-written table of fifty-three names for this, because
+  -- its objects share five GENERIC sheets and the species is genuinely lost:
+  -- one "monster" is Mewtwo and a Machop at once.  Gold's are not generic --
+  -- each has its own sheet -- and the sprite is NAMED after what it is.  So
+  -- the name is the answer, and asking `data.pokemon` whether the rest of the
+  -- id is a species is exact where a written list would be a guess: it covers
+  -- every name in the cart's block without this file having to enumerate one,
+  -- and it cannot fire on a person or a prop, because YOUNGSTER and POKE_BALL
+  -- are not species.
+  --
+  -- ------- and the three it must not fire on
+  --
+  --   SPRITE_BIG_SNORLAX   the bedroom and Pokemon Center DOLLS.  They are
+  --   SPRITE_BIG_LAPRAS    drawn through SetFacingBigDoll as two-by-two dolls
+  --   SPRITE_BIG_ONIX      with a mirrored half (NPC.bigFacing), so they are
+  --                        neither 16x16 nor creatures -- and the joke, as
+  --                        with the three in Red's Copycat's house, is that
+  --                        they are dolls.  A sixteen-pixel Snorlax standing
+  --                        where a doll should be is worse art AND a worse
+  --                        joke.
+  local BIG_DOLLS = {
+    SPRITE_BIG_SNORLAX = true,
+    SPRITE_BIG_LAPRAS = true,
+    SPRITE_BIG_ONIX = true,
+  }
+
+  -- The species an id names, or nil.  Only the sprite half below the mon
+  -- block is asked: above it every row carries `species` already.
+  local function speciesFromSpriteId(game, id)
+    if type(id) ~= "string" then return nil end
+    if BIG_DOLLS[id] then return nil end
+    local name = id:match("^SPRITE_(.+)$")
+    if not name then return nil end
+    local pokemon = game and game.data and game.data.pokemon
+    if type(pokemon) ~= "table" or type(pokemon[name]) ~= "table" then
+      return nil
+    end
+    -- A species this mod has no sheet for is left alone rather than drawn as
+    -- the fallback: the cart's own art is better than the wrong POKeMON.
+    if not dexForSpecies(name) then return nil end
+    return name
+  end
+
+  -- ------- one record, repointed
+  --
+  -- Lifted out of the loop below because not every POKeMON record on Gold
+  -- LIVES in the sprite table.  `World:breedmonSpriteDef` builds the day-care
+  -- pair's def on the fly and caches it on the WORLD -- its species is
+  -- whatever is being bred, so there is no fixed row for it -- which means the
+  -- pass over `data.gen2Sprites` never sees the two POKeMON standing outside
+  -- the Day Care however right its timing and its table are.
+  local function repointMonDef(id, def, enabled, trueColor, walks)
+    local saved = gen2MonOriginals[id]
+    if not saved then
+      saved = { image = def.image, frames = def.frames,
+                walker = def.walker, trueColor = def.trueColor }
+      gen2MonOriginals[id] = saved
+    end
+    if enabled and dexForSpecies(def.species) then
+      def.image = assetPath(def.species)
+      def.frames = 6
+      -- This mod's sheets are the follower's: 16x96, six frames, laid out as
+      -- a walk cycle.  A mon DOLL never walks, so it keeps the cart's `false`
+      -- and shows the first frame; one off the walking half is an object that
+      -- can be told to move, and configureSpriteDef pairs these sheets with
+      -- `walker = true` for exactly that.
+      def.walker = walks and true or false
+      def.trueColor = trueColor
+      def.pokepcFollowerSpecies = def.species
+      def.pokepcFollowerVisualScale = followerVisualScale(def.species)
+    else
+      def.image, def.frames = saved.image, saved.frames
+      def.walker, def.trueColor = saved.walker, saved.trueColor
+      def.pokepcFollowerSpecies = nil
+      def.pokepcFollowerVisualScale = nil
+    end
+    return def
+  end
+
   local function refreshOverworldMonDefs(game)
     local sprites = spritesFor(game)
     if type(sprites) ~= "table" then return end
@@ -631,27 +751,17 @@ return function(mod)
     local trueColor = TRUE_COLOR_ART
     if isGen2 then
       for id, def in pairs(sprites) do
-        if type(def) == "table" and def.spriteType == "POKEMON_SPRITE"
-           and type(def.species) == "string" then
-          local saved = gen2MonOriginals[id]
-          if not saved then
-            saved = { image = def.image, frames = def.frames,
-                      walker = def.walker, trueColor = def.trueColor }
-            gen2MonOriginals[id] = saved
-          end
-          if enabled and dexForSpecies(def.species) then
-            def.image = assetPath(def.species)
-            def.frames = 6
-            def.walker = false
-            def.trueColor = trueColor
-            def.pokepcFollowerSpecies = def.species
-            def.pokepcFollowerVisualScale = followerVisualScale(def.species)
-          else
-            def.image, def.frames = saved.image, saved.frames
-            def.walker, def.trueColor = saved.walker, saved.trueColor
-            def.pokepcFollowerSpecies = nil
-            def.pokepcFollowerVisualScale = nil
-          end
+        local named = (type(def) == "table" and def.spriteType ~= "POKEMON_SPRITE")
+          and speciesFromSpriteId(game, id) or nil
+        if named and not def.species then
+          -- Written onto the record once, so everything below this reads one
+          -- shape whichever half the row came from -- and so a second pass
+          -- takes the ordinary branch rather than deriving it again.
+          def.species = named
+        end
+        if type(def) == "table" and type(def.species) == "string"
+           and (def.spriteType == "POKEMON_SPRITE" or named) then
+          repointMonDef(id, def, enabled, trueColor, named)
         end
       end
       return
@@ -699,6 +809,233 @@ return function(mod)
         end
       end
     end
+  end
+
+  -- ------- and the same thing on Gold, which needs a different moment
+  --
+  -- The Gen 2 arm of refreshOverworldMonDefs above rewrites the shared
+  -- SPRITE_POKEMON_* records in place, and that is the right shape -- Gold's
+  -- overworld POKeMON already name a species, so the record itself can carry
+  -- this mod's sheet.  What was wrong was WHEN.
+  --
+  -- The refresh ran from the onMapEntered wrapper, whose comment says it goes
+  -- "before the map's own objects are built".  That is true on Red.  On Gold
+  -- the follower's onMapEntered is called from the TAIL of World:setMap --
+  -- after rebuildPeople, after applyPalettes, after the music -- and
+  -- rebuildPeople is what builds the map's people.  So by the time the record
+  -- was rewritten, every map POKeMON had already been through
+  -- `NPC.new(mapId, obj, spriteDef)`, which calls `SpriteRenderer.new` on the
+  -- spot.  The sheet is baked at construction.
+  --
+  -- That is why the follower was right and the POKeMON standing on the route
+  -- were not: onMapEntered BUILDS the follower, so it is the one entity made
+  -- after the rewrite.  Everything else was made before it.
+  --
+  -- So the refresh moves to the front of rebuildPeople, and a resync runs
+  -- behind it for the ones a rebuild did not rebuild: `World:pooledNpc` keys
+  -- NPCs by map and object index and hands back the SAME instance on a
+  -- revisit, and `NPC:setSpriteDef` early-returns when the def is the table it
+  -- already has -- which ours always is, because the rewrite is in place.  So
+  -- a pooled POKeMON would keep a renderer built from the cart's icon however
+  -- many times you walked back onto its map.
+  -- ------- and the THIRD half: Gold's four GENERIC creature sheets
+  --
+  -- The comment above says Gold needs no object table because "Gold's are not
+  -- generic -- each has its own sheet -- and the sprite is NAMED after what it
+  -- is".  That is wrong, and this is the part it missed.
+  --
+  -- `tools/rom_manifest_crystal.json`'s `spriteOrder` carries the same four
+  -- generic creature sheets Red does, at [76]-[79]:
+  --
+  --     SPRITE_MONSTER   SPRITE_FAIRY   SPRITE_BIRD   SPRITE_DRAGON
+  --
+  -- They are below the `SPRITE_POKEMON` block ($80 = [128]), so the extractor
+  -- writes them no `species` -- they are not SpriteMons rows -- and the name
+  -- half cannot help either, because MONSTER and DRAGON are not species.  So
+  -- every POKeMON standing on one of these four kept the cart's art, and one
+  -- sheet really does serve several species at once: SPRITE_MONSTER is Joey's
+  -- RATTATA on Route 30 and Jasmine's AMPHAROS in the lighthouse.
+  --
+  -- Which is exactly the case Red needed a written table for, so Gold needs
+  -- one too.  This is it, read off pret/pokecrystal's `maps/*.asm` rather than
+  -- recalled: every `object_event` in the game that names one of the four,
+  -- with the species its own script or event flag gives it.
+  --
+  --   Route30.asm            ROUTE30_MONSTER1/2, and the movement labels the
+  --                          battle script applies to them are
+  --                          `Route30_MikeysRattataAttacksMovement` and
+  --                          `Route30_JoeysRattataAttacksMovement`.
+  --   OlivineLighthouse6F    `OlivineLighthouseAmphy`, whose script does
+  --                          `setval AMPHAROS / special PlaySlowCry`.
+  --   VioletNicknameSpeech-  `VioletNicknameSpeechHouseBirdScript`, whose
+  --   House                  script does `cry PIDGEY`.
+  --   IlexForest             EVENT_ILEX_FOREST_FARFETCHD.
+  --   MountMoonSquare        EVENT_MT_MOON_SQUARE_CLEFAIRY, both of them.
+  --   MahoganyMart1F         EVENT_MAHOGANY_MART_LANCE_AND_DRAGONITE.
+  --   TeamRocketBaseB2F      EVENT_TEAM_ROCKET_BASE_B2F_DRAGONITE.
+  --
+  -- ------- and the four this must NOT touch
+  --
+  -- Thirteen objects in the game use these sheets; nine are POKeMON and four
+  -- are DOLLS, and the dolls are left alone for the same reason Red's Copycat
+  -- house dolls are and for the same reason BIG_DOLLS above are:
+  --
+  --   CopycatsHouse2F   three, all on `CopycatsHouse2FDoll`
+  --   PokemonFanClub    one, on `PokemonFanClubClefairyDollScript`
+  --
+  -- A real CLEFAIRY standing where a Clefairy DOLL should be is worse art and
+  -- a worse joke.  They are absent from the table below, deliberately, and the
+  -- coordinate match is what keeps them absent: a doll's cell is not a row.
+  local GEN2_GENERIC_SHEETS = {
+    SPRITE_MONSTER = true, SPRITE_FAIRY = true,
+    SPRITE_BIRD = true, SPRITE_DRAGON = true,
+  }
+
+  -- map id -> { x, y, sheet, species }, matching pokecrystal's own
+  -- `object_event X, Y, SPRITE_*` order.  All three of x, y and sheet have to
+  -- agree before a row is used: the cell alone would fire on a ROM hack that
+  -- moved somebody else onto it, and the sheet alone cannot tell two
+  -- SPRITE_MONSTER apart.
+  local GEN2_OVERWORLD_MON = {
+    ILEX_FOREST = { { 14, 31, "SPRITE_BIRD", "FARFETCH_D" } },
+    MAHOGANY_MART_1F = { { 3, 6, "SPRITE_DRAGON", "DRAGONITE" } },
+    MOUNT_MOON_SQUARE = {
+      { 6, 6, "SPRITE_FAIRY", "CLEFAIRY" },
+      { 7, 6, "SPRITE_FAIRY", "CLEFAIRY" },
+    },
+    OLIVINE_LIGHTHOUSE_6F = { { 9, 8, "SPRITE_MONSTER", "AMPHAROS" } },
+    ROUTE_30 = {
+      { 5, 24, "SPRITE_MONSTER", "RATTATA" },
+      { 5, 25, "SPRITE_MONSTER", "RATTATA" },
+    },
+    TEAM_ROCKET_BASE_B2F = { { 9, 13, "SPRITE_DRAGON", "DRAGONITE" } },
+    VIOLET_NICKNAME_SPEECH_HOUSE = { { 5, 2, "SPRITE_BIRD", "PIDGEY" } },
+  }
+
+
+  -- The species this NPC is meant to be, or nil.  Read off the MAP OBJECT
+  -- (`npc.def`) rather than the NPC's live cell, so the one that walks -- the
+  -- Violet bird is SPRITEMOVEDATA_WALK_LEFT_RIGHT -- still matches once it has
+  -- stepped off its spawn.
+  local function gen2MapMonSpecies(npc)
+    if not overworldMonsEnabled() then return nil end
+    local obj = type(npc) == "table" and npc.def or nil
+    if type(obj) ~= "table" or not GEN2_GENERIC_SHEETS[obj.sprite] then
+      return nil
+    end
+    local rows = GEN2_OVERWORLD_MON[npc.mapId]
+    if type(rows) ~= "table" then return nil end
+    for _, row in ipairs(rows) do
+      if row[1] == obj.x and row[2] == obj.y and row[3] == obj.sprite then
+        return row[4]
+      end
+    end
+    return nil
+  end
+
+  -- One record per SPECIES, not per object: the two Route 30 RATTATA share a
+  -- sheet so they share a record, exactly as Red's eleven CHANSEY do.  Cloned
+  -- from the cart's own generic def so every field this mod does not set --
+  -- the palette, the sprite type, whatever a later engine adds -- is still the
+  -- cart's, and then repointed through the same `repointMonDef` the named rows
+  -- use, so ON and OFF behave identically on both halves.
+  local gen2MapMonDefs = {}
+  local function gen2MapMonDef(game, species, sheetId)
+    local def = gen2MapMonDefs[species]
+    if not def then
+      local sprites = spritesFor(game)
+      local base = type(sprites) == "table" and sprites[sheetId] or nil
+      if type(base) ~= "table" then return nil end
+      def = {}
+      for k, v in pairs(base) do def[k] = v end
+      def.id = "SPRITE_GEN1WILD_MAP_" .. species
+      def.species = species
+      gen2MapMonDefs[species] = def
+    end
+    -- `walks` is true: all nine are live POKeMON, and the four that are dolls
+    -- are not in the table at all.
+    repointMonDef(def.id, def, true, TRUE_COLOR_ART, true)
+    return def
+  end
+
+  local function resyncGen2OverworldMons(world)
+    if not (isGen2 and world and world.npcs) then return end
+    local game = world.game
+    for _, npc in ipairs(world.npcs) do
+      local def = type(npc) == "table" and npc.spriteDef or nil
+      if type(def) == "table" and def.spriteType == "POKEMON_SPRITE"
+          and type(def.image) == "string"
+          and npc.sprite and npc.sprite.image ~= def.image then
+        local ok, sprite = pcall(SpriteRenderer.new, def, npc.id)
+        if ok and sprite then npc.sprite = sprite end
+      end
+      -- The generic-sheet arm.  A whole DEF is swapped rather than a renderer,
+      -- because one sheet serves several species here and rewriting it in
+      -- place would give Amphy the Rattata's art.  `setSpriteDef` early-returns
+      -- on the table it already holds, so this costs nothing on a revisit --
+      -- and it recomputes `bigFacing`, which keys off the id.
+      local species = gen2MapMonSpecies(npc)
+      if species and dexForSpecies(species) and type(npc.setSpriteDef) == "function" then
+        npc.pokepcVanillaSpriteDef = npc.pokepcVanillaSpriteDef or npc.spriteDef
+        local ours = gen2MapMonDef(game, species, npc.def.sprite)
+        if ours then pcall(npc.setSpriteDef, npc, ours) end
+      elseif npc.pokepcVanillaSpriteDef and type(npc.setSpriteDef) == "function" then
+        -- The option went off mid-game: back to the cart's generic sheet.
+        pcall(npc.setSpriteDef, npc, npc.pokepcVanillaSpriteDef)
+      end
+    end
+  end
+
+  local function installGen2MapMons()
+    local okWorld, World = pcall(require, "src.world.gen2.World")
+    if not (okWorld and type(World) == "table"
+            and type(World.rebuildPeople) == "function") then
+      return false, "no Gen 2 World; map POKeMON keep the cart's icons"
+    end
+    if rawget(World, "__gen1wildMapMons") then return true end
+
+    -- ------- the day-care pair, which has no row to rewrite
+    --
+    -- `World:breedmonSpriteDef` builds their def on the fly and caches it on
+    -- the world: their species is whatever is being bred, so there is no fixed
+    -- SPRITE_* row for them and the pass over `data.gen2Sprites` cannot reach
+    -- one.  The def it returns is the same shape every other mon record has
+    -- (`spriteType = "POKEMON_SPRITE"` and a `species`), so it is repointed on
+    -- the way out.
+    --
+    -- By species rather than by id: every breedmon shares the id
+    -- `SPRITE_DAY_CARE_MON`, so keying the saved original on that would have
+    -- one POKeMON's cart art restored onto another's record the moment the
+    -- pair changed.
+    local baseBreedmon = World.breedmonSpriteDef
+    if type(baseBreedmon) == "function" then
+      World.breedmonSpriteDef = function(world, species)
+        local def = baseBreedmon(world, species)
+        if type(def) ~= "table" or type(def.species) ~= "string" then
+          return def
+        end
+        local ok = pcall(repointMonDef, "SPRITE_DAY_CARE_MON:" .. def.species,
+                         def, overworldMonsEnabled(), TRUE_COLOR_ART, false)
+        if not ok then return def end
+        return def
+      end
+    else
+      mod.log:warn("no breedmonSpriteDef; the day-care pair keeps the cart's "
+        .. "icons")
+    end
+
+    local baseRebuild = World.rebuildPeople
+    World.rebuildPeople = function(world, ...)
+      -- Ahead of the build, so an NPC made here is made from our sheet.
+      pcall(refreshOverworldMonDefs, world and world.game)
+      local ok, result = pcall(baseRebuild, world, ...)
+      if not ok then error(result, 0) end
+      -- And behind it, for the pooled ones the build handed straight back.
+      pcall(resyncGen2OverworldMons, world)
+      return result
+    end
+    World.__gen1wildMapMons = true
+    return true
   end
 
   -- Declared here, installed below the hot-reload teardown.
@@ -1522,6 +1859,115 @@ return function(mod)
   end
 
   -- Apply wrappers
+  -- ----------------------------------------------------------------------
+  -- 9b. The seam between two maps, on Gold
+  -- ----------------------------------------------------------------------
+  -- Walking off the edge of a route and onto the next one made the follower
+  -- vanish and reappear standing ON the player, then trail back out -- a jump
+  -- at every seam, on a crossing that is otherwise seamless.
+  --
+  -- Crossing an edge is not a map ENTRY.  Nothing loaded, nothing warped: the
+  -- world swapped its map data underneath a step that is still running, which
+  -- is why `World:tryConnection` passes `{ seamless = true }` and parks the
+  -- player one cell short of the landing so the same world pixels stay on
+  -- screen.  Red does the follower's half of that too, in three lines
+  -- (src/world/OverworldController.lua:1956-1971):
+  --
+  --   1. take the LIVE follower before the swap,
+  --   2. hand it through `setMap` as `keepPikachu`, so onMapEntered adopts it
+  --      instead of destroying and re-spawning it, and
+  --   3. `rebase` it -- and the cell it is chasing -- by the same translation
+  --      the player just took, which slides both into the new map's frame.
+  --
+  -- Gold's `tryConnection` does none of the three.  It calls setMap with a
+  -- bare `{ seamless = true }`, and setMap calls `Follower.onMapEntered(...,
+  -- true)` -- viaMapLoad TRUE for every load, connection included -- whose
+  -- whole meaning is "a fresh load parks it under the player and it walks out
+  -- as the trail opens".  That is right for a door and wrong for an edge.
+  --
+  -- The engine already has the parts: `Follower.rebase` is written for exactly
+  -- this and says so ("slide into a connected map's frame by the seam's
+  -- delta"), and `onMapEntered` already honours `opts.keepFollower`.  Neither
+  -- has a caller.  So this supplies Red's three lines rather than inventing a
+  -- mechanism: the same instance crosses the seam, translated, and keeps
+  -- walking.
+  --
+  -- Scoped tightly on purpose.  `carried` is set only for the length of one
+  -- `tryConnection` call, and the setMap wrap will not adopt a follower
+  -- unless that call set it AND the load is seamless AND nobody has already
+  -- named one -- so every other map load in the game still takes the engine's
+  -- own path, doors and warps included.
+  local function installGen2SeamlessFollow()
+    local okWorld, World = pcall(require, "src.world.gen2.World")
+    if not (okWorld and type(World) == "table"
+            and type(World.tryConnection) == "function"
+            and type(World.setMap) == "function") then
+      return false, "no Gen 2 World to cross; the follower re-spawns at a seam"
+    end
+    if rawget(World, "__gen1wildSeamFollow") then return true end
+    if type(PikachuFollower.rebase) ~= "function"
+        or type(PikachuFollower.current) ~= "function" then
+      return false, "this follower has no rebase; the seam is left alone"
+    end
+
+    local carried = nil
+
+    local baseSetMap = World.setMap
+    World.setMap = function(world, mapId, cx, cy, facing, opts, ...)
+      if carried and type(opts) == "table" and opts.seamless
+          and opts.keepFollower == nil and opts.keepPikachu == nil then
+        opts.keepFollower = carried
+      end
+      return baseSetMap(world, mapId, cx, cy, facing, opts, ...)
+    end
+
+    local baseTry = World.tryConnection
+    World.tryConnection = function(world, dir, ...)
+      local player = world and world.player
+      local npc = player and PikachuFollower.current(world) or nil
+      if not (npc and player.cellX and player.cellY) then
+        return baseTry(world, dir, ...)
+      end
+      -- The player's cell in the OLD map's frame, read before the swap.
+      local fromX, fromY = player.cellX, player.cellY
+      carried = npc
+      local ok, crossed = pcall(baseTry, world, dir, ...)
+      carried = nil
+      if not ok then error(crossed, 0) end
+      -- Only on a crossing that happened: tryConnection answers false for an
+      -- edge with no neighbour, or one the step could not land on, and
+      -- translating the follower then would walk it off the map.
+      if crossed then
+        pcall(PikachuFollower.rebase, world,
+              player.cellX - fromX, player.cellY - fromY)
+      end
+      return crossed
+    end
+
+    World.__gen1wildSeamFollow = true
+    return true
+  end
+
+  if isGen2 then
+    -- Three values: whether the call itself survived, then the (installed,
+    -- reason) pair each function answers with.
+    local ran, installed, problem = pcall(installGen2SeamlessFollow)
+    if not ran then
+      mod.log:warn("the follower's seam crossing did not install: %s",
+                   tostring(installed))
+    elseif not installed then
+      mod.log:warn("%s", tostring(problem))
+    end
+
+    local mapRan, mapInstalled, mapProblem = pcall(installGen2MapMons)
+    if not mapRan then
+      mod.log:warn("the map POKeMON sheets did not install: %s",
+                   tostring(mapInstalled))
+    elseif not mapInstalled then
+      mod.log:warn("%s", tostring(mapProblem))
+    end
+  end
+
   if originalOnMapEntered then PikachuFollower.onMapEntered = wrappedOnMapEntered end
   if originalUpdate then PikachuFollower.update = wrappedUpdate end
   if originalTalk then PikachuFollower.talk = wrappedTalk end
@@ -1830,6 +2276,10 @@ return function(mod)
       local game = liveGame()
       pcall(refreshOverworldMonDefs, game)
       pcall(resyncOverworldMons, game, worldFor(game))
+      -- Gold rebuilds nothing on an option flip, and its NPCs bake the sheet
+      -- at construction, so the live ones are re-pointed here rather than
+      -- waiting for the next map.
+      pcall(resyncGen2OverworldMons, worldFor(game))
       local mon = getActiveFollowerMon(game, true)
       if mon then configureSpriteDef(game, mon) end
       pcall(syncLiveFollowerDef, game, worldFor(game))

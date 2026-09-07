@@ -49,7 +49,7 @@ end
 -- The same stand-in autosave_veil_test uses, with the event bus kept rather
 -- than dropped: this file's whole subject is what a handler does.
 local function fakeMod()
-  local self = { id = "gen1_wild_qol_nightly", path = ".", exports = {},
+  local self = { id = "gen1_wild_qol", path = ".", exports = {},
                  stored = {}, handlers = {}, hooked = {} }
   self.options = {
     define = function() end,

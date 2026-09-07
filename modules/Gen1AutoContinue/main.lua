@@ -57,6 +57,21 @@
 -- so if the title is still on top afterwards, nothing loaded, and we fall
 -- through to the ordinary menu.  That covers a first boot, a deleted save and
 -- an unrecoverable one with the same three lines and no duplicated logic.
+--
+-- ON GOLD, SILVER AND CRYSTAL
+--
+-- Everything above describes Red's boot.  Gold's is a different set of
+-- screens end to end -- four cards of cinema instead of one, a title with no
+-- menu of its own, and a CONTINUE that opens a save panel and waits for a
+-- second press -- so this mod carries a second arm rather than a branch.  The
+-- long note at `GEN2_TITLE` below is that arm's; the two share the option
+-- rows, the three buttons and what each of them means, and share no code,
+-- because there is none to share.
+--
+-- Until 0.32.24 there was no second arm and the tests above were doing their
+-- job too well: `isGen1Title` refused Gold's title, `isIntro` matched none of
+-- Gold's cards, and the mod sat inert through the whole boot with its row
+-- reading ON.
 
 return function(mod)
   mod.options:define({
@@ -125,6 +140,17 @@ return function(mod)
   -- Weak keys: a title state that has been popped and collected must not be
   -- held alive by our bookkeeping.
   local attached = setmetatable({}, { __mode = "k" })
+
+  -- Which game this is, asked once.  The two arms below share the options,
+  -- the buttons and the promise and share not one line of the attachment,
+  -- because the screens they attach to have nothing in common but their job.
+  local isGen2 = (function()
+    local ok, GameVersion = pcall(require, "src.core.GameVersion")
+    if not ok or type(GameVersion) ~= "table" then return false end
+    if type(GameVersion.generation) ~= "function" then return false end
+    local okCall, generation = pcall(GameVersion.generation)
+    return okCall and generation == 2
+  end)()
 
   -- Gen 1's title, specifically.  Gold's title (src/ui/gen2/TitleState.lua)
   -- calls onContinue straight from update and has no openMenu at all, so it
@@ -234,9 +260,250 @@ return function(mod)
     end
   end
 
+
+  -- ------- GOLD, SILVER AND CRYSTAL
+  --
+  -- The same three buttons and the same promise, over a boot that is built
+  -- out of different parts.  Nothing above this point runs there: Gold's
+  -- title (src/ui/gen2/TitleState.lua) has no `openMenu` and no `toMenu`, so
+  -- `isGen1Title` refuses it, and its boot cinema is four screens rather than
+  -- one, none of which is named `IntroMovie`.  That refusal was correct and
+  -- was doing its job -- it kept the mod from erroring on Gold -- but the
+  -- outcome a player saw was the mod doing nothing at all: the copyright
+  -- card, the GAME FREAK splash, the attract movie, the title, the CONTINUE
+  -- menu and the save panel, all of them, with AUTO CONTINUE reading ON.
+  --
+  -- WHAT THE BOOT IS MADE OF
+  --
+  -- Game2 chains it one screen at a time, each one's `onDone` pushing the
+  -- next (src/core/Game2.lua:showCopyright -> showGameFreak -> showIntro ->
+  -- showTitle):
+  --
+  --   Gen2CopyrightSplash      the (c) card
+  --   Gen2GameFreakPresents    the GAME FREAK logo -- Gen2CrystalSplash on
+  --                            Crystal, which is the Ditto one
+  --   Gen2GoldSilverIntro      the attract movie -- Gen2CrystalIntro on
+  --                            Crystal
+  --   Gen2TitleState           the title, START/A -> Gen2MainMenu
+  --   Gen2MainMenu             CONTINUE / NEW GAME / OPTION / EXIT GAME,
+  --                            and CONTINUE opens the save panel and waits
+  --                            for a second A (MainMenu:update, phase
+  --                            "confirm", after twenty frames of
+  --                            DisplaySaveInfoOnContinue)
+  --
+  -- So the tail this mod collapses on Red -- menu, row, info window, press --
+  -- is a menu, a row, a panel and a press here, and SKIP INTRO has three
+  -- cards to take out instead of one.
+  --
+  -- The two splashes are worth a line of their own.  Their `onDone` is handed
+  -- `self.skipped`, and Game2:showGameFreak reads it as "go straight to the
+  -- title" (src/core/Game2.lua:402-419) -- which is the cart's own answer to
+  -- a button press there, and exactly what SKIP INTRO is asking for.  So
+  -- finishing the splash as SKIPPED takes the attract movie with it rather
+  -- than needing the movie skipped separately.  The movie is still attached
+  -- to, because a build that reaches it another way should still skip it.
+
+  local GEN2_TITLE = "Gen2TitleState"
+  local GEN2_MENU = "Gen2MainMenu"
+  local GEN2_BOOT = {
+    Gen2CopyrightSplash = true,
+    Gen2GameFreakPresents = true,
+    Gen2CrystalSplash = true,
+    Gen2GoldSilverIntro = true,
+    Gen2CrystalIntro = true,
+  }
+
+  local function screenIdOf(state)
+    return type(state) == "table" and type(state.screenId) == "string"
+      and state.screenId or nil
+  end
+
+  local function isGen2Title(state)
+    return screenIdOf(state) == GEN2_TITLE
+      and type(state.update) == "function"
+  end
+
+  local function isGen2Boot(state)
+    local id = screenIdOf(state)
+    return id ~= nil and GEN2_BOOT[id] == true
+  end
+
+  -- All four cards latch themselves shut before running their onDone, and
+  -- they do not agree on the name of the latch: the two movies set `finished`
+  -- and `done`, the two splashes set `done`, the copyright card sets `done`.
+  -- Asking for either is asking the question all four answer.
+  local function bootEnded(state)
+    return state.finished == true or state.done == true
+  end
+
+  -- End one card now, by whatever door it has.  In order, because the doors
+  -- are not equivalent: `skip` says skipped AND ends, `finish` ends and tells
+  -- its onDone whatever `skipped` already says, and the copyright card has
+  -- neither and ends by running its own onDone behind its own latch
+  -- (src/ui/gen2/CopyrightSplash.lua:81-85).
+  local function endBootScreen(state)
+    if bootEnded(state) then return true end
+    -- Before any of them, because it is what the splashes pass on.
+    state.skipped = true
+    if type(state.skip) == "function" then
+      local ok = pcall(state.skip, state)
+      if ok and bootEnded(state) then return true end
+    end
+    if type(state.finish) == "function" then
+      local ok = pcall(state.finish, state)
+      if ok and bootEnded(state) then return true end
+    end
+    if type(state.onDone) == "function" then
+      state.done = true
+      local ok = pcall(state.onDone, state.skipped)
+      if ok then return true end
+      state.done = false
+    end
+    return false
+  end
+
+  -- Each card's onDone pushes the next one, so ending one leaves another on
+  -- top of the stack in the same call.  Ending those too, here, is what keeps
+  -- the whole cinema off the screen: a card ended on its own first update is
+  -- a card that was DRAWN once, on the frame between its push and that
+  -- update, and three cards in a row would be three flashes.  Draining them
+  -- in one update means the title is the first thing the boot ever draws.
+  --
+  -- Bounded, and it stops the moment the top stops changing: a card that
+  -- says it has ended and is still on top is a card this cannot help, and a
+  -- loop is a worse answer than a frame.
+  local function drainBoot(game)
+    local last
+    for _ = 1, #GEN2_BOOT + 2 do
+      local top = game and game.stack and game.stack.top and game.stack:top()
+      if not isGen2Boot(top) or top == last then return end
+      last = top
+      if not endBootScreen(top) then return end
+    end
+  end
+
+  local function attachGen2Boot(state)
+    if attached[state] then return end
+    attached[state] = true
+    if not mod.options:get("skip_intro") then return end
+
+    local baseUpdate = state.update
+    state.update = function(self, dt)
+      if not bootEnded(self) then
+        if endBootScreen(self) then
+          drainBoot(self.game)
+          return
+        end
+        -- It would not end: put the vanilla update back and let the cinema
+        -- play rather than sit on a card that never advances.
+        mod.log:warn("the boot cinema would not skip, playing it")
+        self.update = baseUpdate
+      end
+      return baseUpdate(self, dt)
+    end
+  end
+
+  local function attachGen2Title(state)
+    if attached[state] then return end
+    attached[state] = true
+
+    local baseUpdate = state.update
+    local baseContinue = state.onContinue
+    local menuRequested, exitRequested = false, false
+
+    -- What to do with the menu the title is about to build.
+    --
+    -- Called from inside the title's OWN onContinue, which is the one place
+    -- where the menu exists and the frame has not been drawn yet: Game2:
+    -- showMainMenu has returned, so the stack is settled and clearing it
+    -- again is safe, and nothing has reached the screen.  A menu walked
+    -- straight through here is never seen, which is the whole point -- the
+    -- same reason the Gen 1 arm does its work in `openMenu` rather than a
+    -- frame later.
+    local function resolve(game)
+      local menu = game and game.stack and game.stack.top and game.stack:top()
+      if screenIdOf(menu) ~= GEN2_MENU then return end
+
+      if exitRequested then
+        exitRequested = false
+        -- The engine's own EXIT GAME row, run by value rather than rebuilt:
+        -- `choose` is what the list calls and it ends in `onExit` or the
+        -- host's quit, and only the engine knows which this build wants.
+        local ok, err = pcall(menu.choose, menu, "exit")
+        if not ok then
+          mod.log:warn("no EXIT GAME to run; B ignored: %s", tostring(err))
+        end
+        return
+      end
+
+      if menuRequested then
+        menuRequested = false
+        return
+      end
+
+      if not mod.options:get("enabled") then return end
+      -- No save, or a build whose menu carries no CONTINUE payload: the
+      -- ordinary menu, which is what it is there for.  Nothing here probes
+      -- for a file -- `hasSave` and `save` are what the menu read for itself
+      -- (src/ui/gen2/MainMenu.lua:65-70), which is the same honesty the Gen 1
+      -- arm buys by calling onContinue and looking at the stack.
+      if not menu.hasSave or type(menu.onContinue) ~= "function" then return end
+      -- Gold calls it as a plain function with the save it read
+      -- (MainMenu:update, phase "confirm"), so this is that call without the
+      -- save panel and the second A press in front of it.
+      local ok, err = pcall(menu.onContinue, menu.save)
+      if not ok then
+        -- A load that threw is the engine's problem to report; ours is to
+        -- make sure the player still gets a menu instead of a dead title.
+        mod.log:warn("continue failed, falling back to the menu: %s",
+                     tostring(err))
+      end
+    end
+
+    if type(baseContinue) == "function" then
+      state.onContinue = function(...)
+        local game = state.game
+        baseContinue(...)
+        local ok, err = pcall(resolve, game)
+        if not ok then mod.log:warn("continue failed: %s", tostring(err)) end
+      end
+    end
+
+    state.update = function(self, dt)
+      -- TitleScreenEntrance polls no buttons (engine/menus/intro_menu.asm:
+      -- 1078-1107) and neither does the timeout's fade, so these are read
+      -- exactly where the engine reads its own -- and B and SELECT are dead
+      -- inputs on the vanilla title in both games, so neither takes anything
+      -- away.
+      if (self.entranceScx or 0) <= 0 and not self.fadeStart then
+        local input = self.game and self.game.input
+        if input then
+          if not exitRequested and mod.options:get("exit_on_b")
+              and input:wasPressed("b") then
+            exitRequested = true
+            -- Hand the engine the press it already knows how to answer,
+            -- rather than reproducing the hand-over: the queued edge lands on
+            -- the next step and the title builds its menu itself.
+            pcall(mod.input.tap, mod.input, self.game, "start")
+          elseif not menuRequested and input:wasPressed("select") then
+            menuRequested = true
+            pcall(mod.input.tap, mod.input, self.game, "start")
+          end
+        end
+      end
+      return baseUpdate(self, dt)
+    end
+  end
+
   mod.events:on("screen.pushed", function(ev)
     local state = ev and ev.state
-    if isGen1Title(state) then
+    if isGen2 then
+      if isGen2Title(state) then
+        attachGen2Title(state)
+      elseif isGen2Boot(state) then
+        attachGen2Boot(state)
+      end
+    elseif isGen1Title(state) then
       attach(state)
     elseif isIntro(state) then
       attachIntro(state)

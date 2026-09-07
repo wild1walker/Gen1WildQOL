@@ -29,9 +29,16 @@
 -- Position is a row, because "out of the way" depends on where the player
 -- keeps their eyes, and BOTTOM is there for anyone who wants upstream's
 -- placement back.
+--
+-- GEN 1 ONLY, and the paragraphs above say why without meaning to: every
+-- decision in this file is Gold's decision, copied into a game that never made
+-- it.  Gold makes it itself -- src/world/gen2/MapNameSign.lua is the cart's
+-- own sign, drawn on every map entry that earns one -- so there is nothing
+-- here for a Gen 2 boot to add, and a second plaque in the same corner saying
+-- the same name is the only thing it could add.  features.lua carries the
+-- gate; this file is Red's, Blue's and Yellow's and assumes it.
 
 local OVERLAY_KEY = "__gen1wildAreaBannerOverlay"
-local DRAW_WRAP_KEY = "__gen1wildAreaBannerDrawWrap"
 
 -- Rock Tunnel's Pokemon Center announces itself the moment you leave the dark,
 -- on a map the player has not really entered; upstream suppresses it and so
@@ -214,9 +221,9 @@ local function tracker(mod, read)
   return { show = show, clear = clear, current = current }
 end
 
--- Red/Blue/Yellow: the overworld has a drawUI seam, and by the time it runs
--- the 160x144 game canvas is already set up.
-local function installGen1(mod, read)
+-- The overworld has a drawUI seam, and by the time it runs the 160x144 game
+-- canvas is already set up.
+local function install(mod, read)
   local track = tracker(mod, read)
 
   local function draw(ow)
@@ -250,47 +257,6 @@ local function installGen1(mod, read)
   end)
 end
 
--- Gold has no drawUI seam, so this rides World.draw, which returns with every
--- tilt/pipeline/pokepic push popped back to plain window pixels.  That is why
--- the fit-scale translate is done here rather than assumed -- the same one
--- World:draw uses for its own pokePic block.
-local function installGen2(mod, read)
-  local World = require("src.world.gen2.World")
-  local track = tracker(mod, read)
-
-  local function draw(world)
-    local state = track.current(world)
-    if not state then return end
-    local G = love.graphics
-    local scale = world:fitScale()
-    local w, h = G.getDimensions()
-    G.push()
-    G.translate(math.floor((w - SCREEN_W * scale) / 2),
-                math.floor((h - SCREEN_H * scale) / 2))
-    G.scale(scale, scale)
-    drawPlaque(mod, state, read("qol_banner_position"), read("qol_banner_slide"))
-    G.pop()
-  end
-
-  if not rawget(World, DRAW_WRAP_KEY) then
-    local base = World.draw
-    World.draw = function(self, ...)
-      base(self, ...)
-      draw(self)
-    end
-    World[DRAW_WRAP_KEY] = true
-  end
-
-  mod.events:on("map.entered", function(event)
-    if not event or not event.mapId then return end
-    local world = mod.world and mod.world:overworld()
-    if not world then return end
-    local name = (world.landmarkName and world:landmarkName())
-      or tostring(event.mapId):gsub("_", " ")
-    track.show(world, name:gsub("\n", " "):upper())
-  end)
-end
-
 return function(mod)
   mod.options:define(schema)
 
@@ -306,15 +272,7 @@ return function(mod)
     return value
   end
 
-  local GameVersion = require("src.core.GameVersion")
-  local ok, generation = pcall(GameVersion.generation)
-  if not ok or type(generation) ~= "number" then generation = 1 end
-
-  if generation == 2 then
-    installGen2(mod, read)
-  else
-    installGen1(mod, read)
-  end
+  install(mod, read)
 
   mod.exports.plaqueFor = plaqueFor
 end

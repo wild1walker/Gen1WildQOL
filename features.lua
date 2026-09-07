@@ -66,6 +66,9 @@ return {
     -- the same cards below: either can end up hosting the merged menu.  An
     -- id that is not loaded simply has no row.
     adopted = {
+      { mod = "wild_green_nightly", label = "PLAYER",
+        description = "WHAT YOUR CHARACTER WEARS, THE NAMES THE GAME OFFERS, "
+          .. "AND THE TITLE SCREEN." },
       { mod = "wild_green", label = "PLAYER",
         description = "WHAT YOUR CHARACTER WEARS, THE NAMES THE GAME OFFERS, "
           .. "AND THE TITLE SCREEN." },
@@ -157,6 +160,25 @@ return {
       enabledKey = "qol_npc_walk",
       default = true,
       aliases = { "qol_npc_walk", "NpcWalk" },
+      -- Gen 1 only, because Gold does not have the problem.
+      --
+      -- The whole feature is one number.  Red's NPC takes THIRTY-TWO frames
+      -- to cross a cell against the player's sixteen (src/world/NPC.lua:11
+      -- against src/world/Player.lua:14), so its sixteen-frame walk cycle
+      -- fits twice in one tile and an escort hops.  Gold's is sixteen
+      -- (src/world/gen2/Npc.lua:14) -- the same as its player's -- so one
+      -- cycle is one tile and an escort already walks.
+      --
+      -- Installing it there would not be a no-op, which is why this is a gate
+      -- and not a shrug.  `src.world.NPC` is an ALIAS to Gold's own Npc class
+      -- on a Gen 2 boot rather than a facade over it (the adapter table in
+      -- docs/mod-api-gen2-compat.md), so the replacement really does land on
+      -- the class Gold runs, and it would replace a correct `walkPhase` with
+      -- one re-derived for a cell twice the length.  Worse, `textBoxUp` reads
+      -- `top.isOverworld` off the stack -- and Gold's world is not a stack
+      -- state at all, so on the plain overworld that answers "a box is up"
+      -- and every NPC on the map would stop animating.
+      gen1_only = true,
     },
     {
       id = "banners",
@@ -176,6 +198,29 @@ return {
       -- seconds rather than a boolean.
       default = 3,
       aliases = { "qol_location_banners" },
+      -- Gen 1 only, because Gold already ships this sign.
+      --
+      -- The whole feature is a transcription of one Gen 2 idea into a game
+      -- that never had it.  Every line of the design note at the top of
+      -- bundle_location_banners.lua names Gold as the thing being copied: a
+      -- plaque sized to the name rather than a dialogue box, anchored
+      -- top-left, slid on and off.  Gold does not need the copy -- the sign
+      -- IS the cart's (src/world/gen2/MapNameSign.lua, a transcription of
+      -- engine/events/map_name_sign.asm), it is drawn on every map entry that
+      -- earns one, and it already knows the six landmarks that get no sign
+      -- and the park gates that get one late.
+      --
+      -- So the Gen 2 arm was not a port, it was a second sign.  It rode a
+      -- monkey-patch on `World.draw` and drew its own plaque out of
+      -- `map.entered` -- in the same corner, over the same frames, saying the
+      -- same name as the one underneath it.  Two signs for one door is worse
+      -- than either alone, and the one this bundle would be adding is the
+      -- imitation.
+      --
+      -- The arm is gone rather than switched off: it was the only caller of
+      -- `World.draw`'s wrap, and a patch on the engine's own draw that exists
+      -- to be skipped is a patch that will one day not be.
+      gen1_only = true,
     },
 
     -- ---- your POKeMON
@@ -254,6 +299,29 @@ return {
       enabledKey = "enabled",
       default = true,
       aliases = { "Gen1Rematch", "gen1_rematch", "rematch" },
+      -- Runs on Gold, Silver and Crystal too, through modules/Gen1Rematch/
+      -- gen2.lua.  It was gated on two claims, and both turned out to be
+      -- wrong when they were checked rather than reasoned about.
+      --
+      -- The first was that Gold has this already, through the POKéGEAR: a
+      -- trainer takes your number and calls when they want to go again.  The
+      -- cartridge does.  This engine does not -- not yet.  The rematch flag
+      -- is set by `engine/phone/scripts/trainers.asm`'s .WantsBattle branch,
+      -- that bank is unextracted, `WantsBattle` appears in the port only in a
+      -- comment, and nothing outside Phone.lua ever calls
+      -- Phone.setRematchReady.  So there is no second rematch system to
+      -- compete with; there is no rematch on Gold at all.
+      --
+      -- The second was that neither seam exists there.  `world.talk` really
+      -- is Gen 1's -- but World:interactBody is a method, and this suite
+      -- patches engine methods everywhere.  And `BattleState.newTrainer` has
+      -- no Gen 2 backing because Gold has something better:
+      -- World:startScriptedBattle is the battle, the transition, the music
+      -- and the prize with NONE of the trainer's own script, which is exactly
+      -- the line a rematch has to draw -- on Red that separation had to be
+      -- built by hand.
+      --
+      -- See modules/Gen1Rematch/gen2.lua for the seam-by-seam mapping.
     },
     {
       id = "caught",
@@ -298,6 +366,76 @@ return {
       enabledKey = "enabled",
       default = true,
       aliases = { "Gen151", "gen151" },
+      -- Gen 1 only, because the feature IS a Gen 1 fact.
+      --
+      -- ALL 151 is not "make the dex completable" in the abstract; it is a
+      -- researched placement table -- species, Kanto map, method, level,
+      -- rarity and a justification per row (placements.lua) -- for the
+      -- hundred and fifty-one, against the version-exclusive and
+      -- trade-evolution gaps Red and Blue actually have.  None of those three
+      -- inputs survives the move: Gold's dex is two hundred and fifty-one,
+      -- its maps are Johto, and the gaps it has are different gaps closed by
+      -- different means (breeding, time of day, the day-care, the phone).
+      --
+      -- The honest Gen 2 answer is a placement table written for Johto, which
+      -- is a different piece of research and belongs to whoever does it.  A
+      -- cart that wants the Gen 2 shape of this pins CRYSTAL_251, which the
+      -- nightly already lists as an optional dependency.
+      gen1_only = true,
+    },
+
+    -- ---- catching everything, on the other three cartridges
+    --
+    -- The Gen 2 half of ALL 151, and a separate row rather than that one's
+    -- Gen 2 arm because it is a separate piece of research: a different
+    -- table, against different gaps, on different maps.  The two can never
+    -- install together -- each is gated to its own generation -- so a save
+    -- only ever sees the one that means anything.
+    {
+      id = "gen251",
+      group = "pokemon",
+      install_seq = 19,
+      priority = 900,
+      -- Gen151's repository, not one of its own.  ALL 251 ships beside ALL 151
+      -- because the research behind them is one body of work, and its files
+      -- live under `gen2/` there: build.lua, placements.lua and roll.lua exist
+      -- on both sides with the same names and different contents, so the
+      -- folder is what keeps a Johto lookup off a Kanto table.
+      dir = "Gen151",
+      entry = "gen2/main.lua",
+      label = "ALL 251",
+      description = "EVERY ONE OF THE 251 OBTAINABLE IN ONE SAVE, ON ONE "
+        .. "CARTRIDGE, WITHOUT TRADING.",
+      enabledKey = "enabled",
+      default = true,
+      aliases = { "Gen251", "gen251" },
+      gen2_only = true,
+    },
+
+    -- ---- the GS BALL
+    --
+    -- Sits beside ALL 151 rather than under GENERAL because it answers the
+    -- same question that one does -- "can this save actually hold them all?"
+    -- -- for the one Pokemon no cartridge sold outside Japan will ever give
+    -- up.  Its own switch is live: OFF is a Crystal that never heard of the
+    -- Mobile Adapter, which is the Crystal everybody played.
+    {
+      id = "celebi",
+      group = "pokemon",
+      install_seq = 18,
+      priority = 900,
+      dir = "Gen151",
+      entry = "gen2/celebi.lua",
+      label = "GS BALL",
+      description = "UNLOCKS CRYSTAL'S OWN CELEBI EVENT, WHICH SHIPPED "
+        .. "FINISHED AND UNREACHABLE.",
+      enabledKey = "enabled",
+      default = true,
+      aliases = { "Gen2Celebi", "celebi", "gs_ball" },
+      -- Gen 2 only, because the event is: there is no GS BALL, no shrine
+      -- script and no CELEBI event anywhere in Red, Blue or Yellow, and
+      -- nothing for this to unlock there.
+      gen2_only = true,
     },
 
     -- ---- the machines
@@ -414,6 +552,14 @@ return {
       shared = {
         claim = "gen1wild_menu_manager",
         storage = "gen1_wild_shared",
+        -- The fork renamed the bundles; this names one of them, so it is
+        -- renamed too.  Same class of stale id as the paired_bundle this
+        -- fork carried for eleven releases, and the same consequence in
+        -- miniature: the fallback only runs when no engine module can hold
+        -- the claim table, and with a name neither nightly bundle answers to
+        -- BOTH stand down and the feature goes missing rather than being
+        -- installed twice.  tools/check.py fails on a name no bundle here
+        -- carries.
         owner = "gen1_wild_ui",
       },
     },
@@ -434,6 +580,14 @@ return {
       shared = {
         claim = "gen1wild_mod_menu",
         storage = "gen1_wild_shared",
+        -- The fork renamed the bundles; this names one of them, so it is
+        -- renamed too.  Same class of stale id as the paired_bundle this
+        -- fork carried for eleven releases, and the same consequence in
+        -- miniature: the fallback only runs when no engine module can hold
+        -- the claim table, and with a name neither nightly bundle answers to
+        -- BOTH stand down and the feature goes missing rather than being
+        -- installed twice.  tools/check.py fails on a name no bundle here
+        -- carries.
         owner = "gen1_wild_ui",
       },
     },

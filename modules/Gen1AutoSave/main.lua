@@ -227,6 +227,120 @@ return function(mod)
 
   -- Same settled-overworld rule the engine uses for its own snapshots: no
   -- movement, no script, no transition, and the overworld actually on top.
+  -- ---------- THE WORLD, ASKED THE SAME QUESTIONS ON BOTH GAMES
+  --
+  -- Everything below this block is one of six questions about the map: is
+  -- there one, is the player mid-step, is a direction held, has a script got
+  -- the controls, is a fade running, is a screen standing over it.  Each has
+  -- an answer in both games and the two games spell every one of them
+  -- differently, so the spelling is done once, here, and nothing further down
+  -- knows which game it is on.
+  --
+  -- It was NOT done at all before 0.32.24, and the cost was the whole mod.
+  -- Every one of those questions was asked as `game.overworld`, which is
+  -- Red's OverworldState singleton and does not exist on Gold -- Game2 holds
+  -- its world at `game.world` and it is not a stack state at all.  So on a
+  -- Gold boot `writeWindow` opened with `if not (ow and ow.player) then
+  -- return false end` and returned false on every frame of every playthrough,
+  -- `writeUnderCover` returned before it looked at anything, and AUTO SAVE
+  -- never wrote a file in its life while reading ON in the menu.
+  --
+  -- (The `src.core.Game` facade does alias `Game.overworld` to `Game2.world`
+  -- for a mod that requires the module -- docs/mod-api-gen2-compat.md.  This
+  -- mod never requires it: its `game` is the live instance a hook hands it,
+  -- which is the real Game2 and carries no alias.  Reaching for the facade to
+  -- get one would be asking for an engine_internals permission to rename a
+  -- field this file can read either way.)
+  --
+  -- The four differences, and where each is written down in the engine:
+  --
+  --   the world        `game.overworld` / `game.world`
+  --   free roam        the overworld IS the top state / the stack is EMPTY
+  --                    (src/core/Game2.lua:pipelineGate says it outright)
+  --   a fade           `ow.transitioning` / `ow.teleportOut` on Red; on Gold
+  --                    a `mapSetup` chain with `fade` and `fadeLevel` under
+  --                    it (World:runMapSetup, World:battleReturnFade), which
+  --                    is also why the veil questions below grew a second arm
+  --   the controls     `ow.runner` + `ow.scriptMoves` / `World:busy`'s parts
+  local IS_GEN2 = (function()
+    local ok, GameVersion = pcall(require, "src.core.GameVersion")
+    if not ok or type(GameVersion) ~= "table" then return false end
+    if type(GameVersion.generation) ~= "function" then return false end
+    local okCall, generation = pcall(GameVersion.generation)
+    return okCall and generation == 2
+  end)()
+
+  -- The map object with a player standing on it, or nil.  Both names are read
+  -- rather than one being picked by IS_GEN2, because a build that answers
+  -- neither -- a title screen, the mod manager -- has to come out nil on both
+  -- games and does either way.
+  local function worldOf(game)
+    if not game then return nil end
+    return game.overworld or game.world
+  end
+
+  -- Is a fade the WORLD ITSELF owns running?  Not the same question as "is
+  -- there a veil on the screen" -- that is veilStepping / fullyVeiled below,
+  -- which also look at the stack -- but the narrower one the checkpoint half
+  -- asks: has the player just walked into a door.
+  local function worldFading(ow)
+    if not ow then return false end
+    if IS_GEN2 then
+      -- A warp, a door, a teleport, the ride back out of a battle and a
+      -- scripted FadeOutToWhite are all this pair; `fade` alone is the
+      -- scripted one, which has no chain (World:screenFade).
+      return (ow.mapSetup or ow.fade) ~= nil
+    end
+    return (ow.transitioning or ow.teleportOut) and true or false
+  end
+
+  -- Has something other than the player got the controls?
+  local function scriptRunning(ow)
+    if not ow then return false end
+    if IS_GEN2 then
+      -- World:busy() minus its `mapSetup` arm, which worldFading owns above.
+      -- The split matters in exactly one place and it is the important one:
+      -- `loadScreenWrite` refuses a running script and is the path that
+      -- writes UNDER a warp's black screen, so folding the fade in here would
+      -- refuse the one window this mod most wants.
+      if type(ow.scriptRunning) == "function" then
+        local okCall, running = pcall(ow.scriptRunning, ow)
+        if okCall and running then return true end
+      end
+      -- The rest of World:busy: a text box, a choice box, an applymovement,
+      -- the rod cast, the tree shake, a field move's tail, FlyToAnim and the
+      -- skyfall.  All of them are blocking script commands on the cart, so
+      -- all of them are the player not having the controls.
+      return (ow.textbox or ow.choicebox or ow.moveState or ow.fishing
+              or ow.headbutt or ow.fieldMove or ow.flyAnim or ow.skyfall)
+             ~= nil
+    end
+    if ow.runner and ow.runner.isRunning and ow.runner:isRunning() then
+      return true
+    end
+    return #(ow.scriptMoves or {}) > 0
+  end
+
+  -- Is the player standing on the map with nothing over them?  Red answers
+  -- it with the overworld being the top state; Gold's world is not a state,
+  -- so free roam there is an EMPTY stack -- which is how Game2:pipelineGate
+  -- puts it too, and it is the same fact `screenOver` reads from the other
+  -- side.
+  local function freeRoam(game)
+    local top = game and game.stack and game.stack.top and game.stack:top()
+    if IS_GEN2 then return top == nil end
+    return top ~= nil and top == game.overworld
+  end
+
+  -- The map holding the player for something that is not a script: Red's
+  -- trainer-spotted `!` and its emote bubbles.  Gold has no pair of flags for
+  -- it because it needs none -- the `!` is an applymovement inside a script
+  -- there, so `scriptRunning` above already carries it.
+  local function worldHolding(ow)
+    if not ow or IS_GEN2 then return false end
+    return (ow.engaging or ow.emote) and true or false
+  end
+
   -- Any direction held, which is the engine's own hJoyHeld & PAD_CTRL_PAD
   -- question (OverworldState:dirHeld).  Asked through the overworld when it
   -- can answer, and off the raw input when it cannot, so an engine older than
@@ -236,6 +350,10 @@ return function(mod)
       local ok, held = pcall(ow.dirHeld, ow)
       if ok then return held == true end
     end
+    -- Gold keeps the same answer as a field rather than a method: `heldDir`
+    -- is refreshed from real input by World:pollInput and is the latch its
+    -- own ice slide reads (src/world/gen2/World.lua:10473).
+    if IS_GEN2 and ow and ow.heldDir ~= nil then return true end
     local input = game and game.input
     if input and type(input.isDown) == "function" then
       for _, dir in ipairs({ "up", "down", "left", "right" }) do
@@ -254,9 +372,14 @@ return function(mod)
   -- wanted to, and the overworld behind is a still picture.  Those are the
   -- moments this mod wants and it does not have to name them one by one.
   local function screenOver(game)
-    local ow = game and game.overworld
+    local ow = worldOf(game)
     if not ow then return false end
     local top = game.stack and game.stack.top and game.stack:top()
+    -- Gold's world is not a stack state, so ANY state on the stack is a
+    -- screen standing over it and an empty stack is free roam.  Asking
+    -- `top ~= ow` there would have answered "a screen is up" on every frame
+    -- of the map and "nothing is up" inside every menu -- both backwards.
+    if IS_GEN2 then return top ~= nil end
     return top ~= nil and top ~= ow
   end
 
@@ -282,20 +405,25 @@ return function(mod)
   -- Not "a transition is up".  At alpha 1 a transition is the best frame in
   -- the game to spend, which is what fullyVeiled is for; refusing those would
   -- give back the door freeze this mod spent three versions removing.
+  --
+  -- And on Gold the veil is not a state either.  A door, a warp and the ride
+  -- back out of a battle are all `World:runMapSetup`, whose ramp is
+  -- `world.fade` with `world.fadeLevel` from 0 to 1 under it -- so the arm
+  -- below is the same question asked of the world instead of the stack.  Both
+  -- are asked, in that order, because a mod's own fade IS a state on either
+  -- game and has the first word about what is on the screen.
   local function veilStepping(game)
     local top = game and game.stack and game.stack.top and game.stack:top()
-    if type(top) ~= "table" or type(top.alpha) ~= "function" then return false end
-    local ok, a = pcall(top.alpha, top)
-    if not ok or type(a) ~= "number" then return false end
-    return a > 0 and a < 1
-  end
-
-  local function scriptRunning(ow)
-    if not ow then return false end
-    if ow.runner and ow.runner.isRunning and ow.runner:isRunning() then
-      return true
+    if type(top) == "table" and type(top.alpha) == "function" then
+      local ok, a = pcall(top.alpha, top)
+      if ok and type(a) == "number" and a > 0 and a < 1 then return true end
     end
-    return #(ow.scriptMoves or {}) > 0
+    if IS_GEN2 then
+      local ow = worldOf(game)
+      local level = ow and ow.fade and tonumber(ow.fadeLevel)
+      if level and level > 0 and level < 1 then return true end
+    end
+    return false
   end
 
   -- Is the SCREEN moving -- would a dropped frame be seen on this one?
@@ -315,7 +443,7 @@ return function(mod)
   -- STILL_FOR seconds of one, or the moment a menu or a conversation just
   -- ended and the player has not started moving again.
   local function quietFrame(game)
-    local ow = game and game.overworld
+    local ow = worldOf(game)
     -- No overworld at all: a title screen, the mod manager, a save select.
     if not (ow and ow.player) then return true end
     -- A FADE IS AN ANIMATION.  This used to say the opposite -- a transition
@@ -329,7 +457,7 @@ return function(mod)
     --
     -- Ahead of screenOver, because the transition IS a screen over the
     -- overworld and would have been called quiet by the line below.
-    if ow.transitioning or ow.teleportOut then return false end
+    if worldFading(ow) then return false end
     -- And the same for a fade that is a state rather than a flag: the end of
     -- a battle is the one every player watches, and screenOver called it the
     -- quietest frame in the game.  See veilStepping.
@@ -423,11 +551,11 @@ return function(mod)
   -- dirty are mostly the ones that lead to a fade soon after, so in practice
   -- that wait is short.
   local function writeWindow(game)
-    local ow = game and game.overworld
+    local ow = worldOf(game)
     if not (ow and ow.player) then return false end
     if state.inBattle or state.outcomePending then return false end
     if scriptRunning(ow) then return false end
-    if ow.engaging or ow.emote then return false end
+    if worldHolding(ow) then return false end
     -- Ahead of screenOver, for the reason quietFrame gives above: a
     -- transition IS a screen over the overworld, so the line below was
     -- answering yes for the one frame this mod most needs to answer no for.
@@ -435,7 +563,7 @@ return function(mod)
     -- warp's fade, which is the animation being cut rather than covered.  A
     -- write that WANTS to be under the black screen does not come through
     -- here; it comes through loadScreenWrite, which decides for itself.
-    if ow.transitioning or ow.teleportOut then return false end
+    if worldFading(ow) then return false end
     -- A screen over the overworld is a REFUSAL here, not a window.  A write
     -- that wants to go under one the player cannot press through -- a warp's
     -- black screen, a battle's return hold -- comes through loadScreenWrite,
@@ -461,10 +589,9 @@ return function(mod)
   local releaseOutcome
 
   local function trackStillness(game, dt)
-    local ow = game and game.overworld
+    local ow = worldOf(game)
     local held = state.inBattle or screenOver(game) or scriptRunning(ow)
-      or (ow and ow.player and (ow.engaging or ow.emote or ow.transitioning
-                                or ow.teleportOut)) or false
+      or (ow and ow.player and (worldHolding(ow) or worldFading(ow))) or false
     if state.wasHeld and not held then state.settledAt = state.clock end
     state.wasHeld = held and true or false
 
@@ -1066,7 +1193,7 @@ return function(mod)
     if state.quit or state.pendingRestore then return end
     if not (state.due and state.dirty) then return end
     if state.clock - state.lastWriteAt < MIN_GAP then return end
-    local ow = game and game.overworld
+    local ow = worldOf(game)
     if ow and ow.player and ow.player.moving then return end
     if scriptRunning(ow) then return end
     if not syncSettled(game) then return end
@@ -1414,6 +1541,16 @@ return function(mod)
       local ok, a = pcall(top.alpha, top)
       full = ok and type(a) == "number" and a >= 1
     end
+    -- Gold's own hold, and it is a real one rather than a ramp's single
+    -- frame: RunMapSetupScript sits at full white for MAP_LOAD_WHITE_FRAMES
+    -- (13, and 15 through a warp) while the map loads under it
+    -- (src/world/gen2/World.lua:updateMapSetup), so the frame-before test
+    -- below costs the same one frame there that it costs on a staircase.
+    if not full and IS_GEN2 then
+      local ow = worldOf(game)
+      full = ow ~= nil and ow.fade ~= nil
+        and (tonumber(ow.fadeLevel) or 0) >= 1
+    end
     if not full then
       state.veiled = 0
       return false
@@ -1428,12 +1565,12 @@ return function(mod)
   -- fade.  Asking for the save at the top is what makes it due in time to be
   -- taken at the bottom.
   local function writeUnderCover(game)
-    local ow = game and game.overworld
+    local ow = worldOf(game)
     if not (ow and ow.player) then
       state.fading = false
       return
     end
-    local fading = (ow.transitioning or ow.teleportOut) and true or false
+    local fading = worldFading(ow)
     if fading and not state.fading then
       -- a new door: nothing has been taken under this one yet
       state.fadeWrote = false
@@ -1475,6 +1612,15 @@ return function(mod)
   -- frame, and the answer changed with SAVE ON LOADS in a way nothing else in
   -- the tree could have caught.
   mod.exports.writeWindow = writeWindow
+  -- And the two whose ANSWER IS REVERSED between the generations, which is
+  -- the most dangerous shape a cross-generation question can have: on Red a
+  -- screen is over the world when the top state is not the world, on Gold
+  -- when there is a top state at all, and an empty stack means "nothing is
+  -- open" on one game and "the player is standing on the map" on the other.
+  -- Read the wrong one and every frame of the map is a menu, which is not a
+  -- crash and not a wrong pixel -- it is a mod that quietly never writes.
+  mod.exports.screenOver = screenOver
+  mod.exports.freeRoam = freeRoam
 
   -- ...and two for the nightly channel's test bench, which is the other thing
   -- that wants to drive this by hand.  A save cannot be watched for by
@@ -1672,15 +1818,11 @@ return function(mod)
     if not (state.dirty and not state.inBattle) then return false end
     local engine = syncEngineOf(game)
     if engine and syncConflicted(engine) then return false end
-    local ow = game.overworld
+    local ow = worldOf(game)
     -- no overworldIdle here: the start menu is on top of it by definition.
     -- Mid-script and mid-step are still reasons to leave the file alone.
     if not ow then return false end
-    if (ow.runner and ow.runner.isRunning and ow.runner:isRunning())
-        or #(ow.scriptMoves or {}) > 0
-        or ow.teleportOut or ow.transitioning then
-      return false
-    end
+    if scriptRunning(ow) or worldFading(ow) then return false end
     return true
   end
 
@@ -1766,23 +1908,75 @@ return function(mod)
     finishQuit(game)
   end
 
+  -- ------- and the two games shape the QUIT row differently
+  --
+  -- Red's rows are CALLBACKS.  `src/ui/StartMenu.lua` builds QUIT as
+  -- `{ label, onSelect = function() ... end }`, so wrapping onSelect is the
+  -- whole of the interception.
+  --
+  -- Gold's rows are VALUES.  `StartMenu:visibleItems` builds
+  -- `{ label, value = "quit", desc, translateLabel }` and `StartMenu:choose`
+  -- dispatches on the value -- so there is no onSelect to wrap, and this hook
+  -- skipped the row entirely.  Reported as "doesn't ask you to save before
+  -- quitting", which is exactly what it did: nothing, silently.
+  --
+  -- Gold's own arm for a mod row is `item.onSelect and item.value == nil`, so
+  -- taking the row over means taking the VALUE off it -- the two are
+  -- exclusive there.  Which puts the cart's own confirm back on this mod: the
+  -- fallback below reproduces the arm the value would have reached
+  -- (`self.phase = "confirm"`, NO preselected), so a frame where the offer is
+  -- declined is the cart's QUIT exactly, box and default and all.
+  local function cartQuit(game)
+    local stack = game and game.stack
+    local menu = stack and type(stack.top) == "function" and stack:top()
+    -- StartMenu:choose's quit arm, which is the one the value would have hit
+    if type(menu) == "table" and menu.list and menu.items then
+      menu.phase = "confirm"
+      menu.confirmChoice = 2
+      return true
+    end
+    -- No menu to ask through -- something has been pushed over it since the
+    -- press.  Quitting outright would throw the game away on a row the player
+    -- may have half-pressed, so this does nothing rather than guess.
+    return false
+  end
+
+  local function offerQuit(game, fallback)
+    -- our box replaces the engine's, so it is this or that, never both;
+    -- anything that stops us falls back to the vanilla prompt
+    if not state.quit and quitSaveOffered(game) and askQuit(game) then
+      return
+    end
+    return fallback()
+  end
+
   mod.hooks:wrap("ui.start_menu.items", function(nextFn, game, items)
     local out = nextFn(game, items)
     if type(out) ~= "table" then return out end
     if on() and mod.options:get("onquit") then
       for _, item in ipairs(out) do
-        local isQuit = item.id == "quit" or item.label == "QUIT"
-        if isQuit and type(item.onSelect) == "function"
-            and not item.gen1autosaveWrapped then
-          local original = item.onSelect
-          item.gen1autosaveWrapped = true
-          item.onSelect = function(...)
-            -- our box replaces the engine's, so it is this or that, never
-            -- both; anything that stops us falls back to the vanilla prompt
-            if not state.quit and quitSaveOffered(game) and askQuit(game) then
-              return
+        -- `value` is Gold's key and is the stable one: `label` is the source
+        -- string before the engine translates it, so matching on it alone
+        -- would stop working in every language but this one.
+        local isQuit = item.id == "quit" or item.value == "quit"
+          or item.label == "QUIT"
+        if isQuit and not item.gen1autosaveWrapped then
+          if type(item.onSelect) == "function" then
+            local original = item.onSelect
+            item.gen1autosaveWrapped = true
+            item.onSelect = function(...)
+              local args = { ... }
+              return offerQuit(game, function()
+                return original(unpack and unpack(args) or table.unpack(args))
+              end)
             end
-            return original(...)
+          elseif item.value ~= nil then
+            item.gen1autosaveWrapped = true
+            item.value = nil
+            item.onSelect = function(chosen)
+              local g = chosen or game
+              return offerQuit(g, function() return cartQuit(g) end)
+            end
           end
         end
       end
@@ -1806,8 +2000,11 @@ return function(mod)
     local seq = state.pendingRestore
     if not seq then return end
 
-    local top = game.stack and game.stack:top()
-    if top ~= game.overworld then
+    -- The unwind below is the same on both games -- one screen per frame
+    -- until the backups list and the start menu over it are gone -- but what
+    -- it is unwinding TOWARDS is spelled differently, so freeRoam is asked
+    -- rather than the overworld compared.
+    if not freeRoam(game) then
       -- unwind the backups list / start menu, one screen per frame
       if game.stack and game.stack.pop then
         state.popped = (state.popped or 0) + 1
@@ -1983,6 +2180,51 @@ return function(mod)
     return (ok and type(cap) == "number" and cap > 0) or false
   end
 
+  -- HOW BIG A GB PIXEL IS, and the two games do not answer it in the same
+  -- units under the same name.
+  --
+  -- On Red, `viewport.scale` is Sp: FRAMEBUFFER pixels per GB pixel, while
+  -- gameX/gameY/gameWidth/gameHeight are LOVE units -- Sp divided by the
+  -- display's DPI scale (src/render/Renderer.lua:818-822, `r.Sp, r.Sx,
+  -- r.Sy = Sp, Sp / dpiX, Sp / dpiY`).  Drawing at Sp inside a unit-space
+  -- transform multiplies the panel by the DPI factor, which on a 3x phone
+  -- screen is a box three times too wide that runs off the edge.  So the
+  -- unit scale there is scale/dpi, and that is what this did.
+  --
+  -- On Gold, `viewport.scale` is ALREADY the unit scale.  Game2:viewport
+  -- builds the whole payload out of `Chrome.fitScale(w, h)`, which is
+  -- computed from the window's LOVE units, and publishes `gameWidth =
+  -- 160 * scale` beside it -- so scale and gameWidth are in the same units
+  -- and there is no Sp anywhere in it.
+  --
+  -- Dividing by dpi there divides a second time, and the indicator came out
+  -- at 1/dpi of its size: correct on a plain 1x desktop, a third of a POKe
+  -- BALL on a phone.  Reported as exactly that.
+  --
+  -- Both arms are written out rather than derived from the payload, because
+  -- the two CAN agree by accident -- at dpi 1, or on a widescreen frame
+  -- where Red's own UI width is 160 * dpi -- and a rule that reads the
+  -- right answer off a coincidence is a rule that is wrong the first time
+  -- the coincidence breaks.
+  --
+  -- Pulled out and exposed for the same reason the veil questions are: it is
+  -- a pure function of one payload, and it was wrong in a way nothing else in
+  -- the tree could have caught -- the indicator was the right shape in the
+  -- right corner and a third of its size, on one of the two games.
+  local function hudScale(viewport, gameWidth)
+    local sx, sy = viewport.scale, viewport.scale
+    if sx and not IS_GEN2 then
+      sx = sx / (viewport.dpiX or 1)
+      sy = sy / (viewport.dpiY or 1)
+    end
+    -- the playfield width is the fallback when a field is missing
+    if not sx or sx <= 0 then sx = (gameWidth or 0) / (BOX_W * 8) end
+    if not sy or sy <= 0 then sy = sx end
+    return sx, sy
+  end
+
+  mod.exports.hudScale = hudScale
+
   local function drawNotify(viewport)
     if state.notify <= 0 then return end
     local mode = mod.options:get("notify")
@@ -2025,16 +2267,7 @@ return function(mod)
 
     local boxed = mode == "box"
 
-    -- viewport.scale is Sp: FRAMEBUFFER pixels per GB pixel.  gameX/gameY/
-    -- gameWidth/gameHeight are LOVE units -- Sp divided by the display's DPI
-    -- scale.  Drawing at Sp inside a unit-space transform multiplies the panel
-    -- by the DPI factor, which on a 3x phone screen is a box three times too
-    -- wide that runs off the edge.  Sx/Sy (scale/dpi) is the unit scale, and
-    -- the playfield width is the fallback when a field is missing.
-    local sx = viewport.scale and viewport.scale / (viewport.dpiX or 1)
-    local sy = viewport.scale and viewport.scale / (viewport.dpiY or 1)
-    if not sx or sx <= 0 then sx = gw / (BOX_W * 8) end
-    if not sy or sy <= 0 then sy = sx end
+    local sx, sy = hudScale(viewport, gw)
 
     -- The ball is its own little panel: sprite-sized, top right, and it fades
     -- on the way out instead of blinking off.  The held cross shares the slot

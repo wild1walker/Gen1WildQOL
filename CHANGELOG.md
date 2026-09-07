@@ -1,5 +1,68 @@
 # Changelog
 
+## 1.30.0
+
+**The whole bundle runs on Gold, Silver and Crystal.** The manifest declares
+`gen2`, and every feature either works there or stands down and says why. This
+is the Gen 2 work from the nightly channel, promoted through each mod's own
+repository first — so a player running any of these standalone gets it too.
+
+### Added
+
+- **`ALL 251`** (Gen151 1.6.1) — every one of the 251 obtainable in one save,
+  on one cartridge, without trading. A separate row from `ALL 151` rather than
+  its Gen 2 arm, because it is separate research: a different table, against
+  different gaps, on different maps. The two are each gated to their own
+  generation and can never install together. It brings the ten Gen 2 trade
+  evolutions and the statics — LUGIA, HO-OH and SNORLAX stay until caught,
+  RAIKOU and ENTEI go back to roaming — without writing an event flag, because
+  Gen 2's `EVENT_FOUGHT_*` are load-bearing for progression.
+
+- **`GS BALL`** — unlocks Crystal's own CELEBI event, which shipped finished
+  and unreachable outside Japan. Off is a Crystal that never heard of the
+  Mobile Adapter.
+
+  Both live in the Gen151 repository rather than repositories of their own:
+  they answer the question `ALL 151` answers, and the research behind all three
+  is one body of work.
+
+- **A cart saves into its own scope on Gold** (`runtime/cartsave2.lua`), rather
+  than into the base game's.
+
+### Changed
+
+- **`AUTOSAVE` knows when Gold is busy** (Gen1AutoSave 1.20.0). On Red a fade
+  is `transitioning` or `teleportOut`; Gold has neither — a warp, a door, a
+  teleport, the ride out of a battle and a scripted fade to white are all
+  `mapSetup` or `fade`. The three guards are each defined once with a branch
+  per cart. Nothing about when it saves changed on Red.
+
+- **`AUTO CONTINUE` gets past both of Gold's opening screens** (Gen1AutoContinue
+  1.3.0). Red opens on a title screen; Gold boots through its own splash first
+  and shows the title after, so there are two attach points rather than one.
+
+- **`TRAINER REMATCH` installs on Gold.** It hooked `World.update`, which Gold
+  has no such method for — `Game2` calls `world:step()`. Every seam it needs is
+  now read off the engine by name, and it stands down loudly rather than
+  silently when one is missing.
+
+- **Followers put every swapped Gen 2 sprite back** (Gen1Follower 1.8.0) when
+  `OVERWORLD MON SPRITES` goes off, not just the ones on screen.
+
+- **The START menu comes back once on Gold** (Gen1MenuManager 0.5.0), not
+  twice, and a Gen 2-only `ROW HINTS` row.
+
+### Removed
+
+- **`AREA BANNER` no longer draws on Gold.** It had grown a Gen 2 arm that rode
+  `World.draw` — but Gold already draws its own map-entry sign
+  (`src/world/gen2/MapNameSign.lua`, from `map_name_sign.asm`), so the arm put
+  a *second* plaque in the same corner saying the same name. Every decision in
+  that feature is Gold's decision copied into a game that never made it; Gold
+  makes it itself. The feature is Gen 1 only now, and `features.lua` carries
+  the gate.
+
+
 ## 1.29.1
 
 - **TRAINER REMATCH stopped answering for the engine, which is what was

@@ -276,10 +276,113 @@ function Facade.new(feature, context)
     return nil
   end
 
+  -- ---- content
+  --
+  -- Straight through, with one exception: a screen this suite REGISTERS is
+  -- one of ours, and UI THEME should not have to be taught its name.
+  --
+  -- THIS HALF CARRIES NO THEME, and marks screens anyway.  That is not
+  -- belt-and-braces, it is the only place the mark can be put for two
+  -- features: MENU LAYOUT and MOD MANAGER are `shared`, both bundles carry
+  -- them, and the FIRST to load claims them (runtime/claims.lua).  This half
+  -- is first in the cart's load order, so on any build that has both --
+  -- which is every cart -- the layout editor is registered through THIS
+  -- facade and never reaches the other one's.  It stayed white in a dark
+  -- game for exactly that reason: the marking lived only where the theme
+  -- does, and the screen is registered where the theme is not.
+  --
+  -- The mark is inert with no theme installed: it is a field on an instance
+  -- that nothing here reads.  So a player running this half alone is
+  -- unaffected, and one running both gets a themed editor whichever bundle
+  -- happened to win the claim.
+  --
+  -- The theme recognises a page two ways -- a marker on the instance, or one
+  -- of the engine's own UI classes.  A screen a mod registers is neither: it
+  -- is a plain table with no class to match and nothing on it that says whose
+  -- it is, so `SELECT MENU`, the layout editor and everything else this
+  -- bundle adds stayed white in a dark game.  Marking them one by one is a
+  -- list that rots; marking them here is the registry doing it once.
+  --
+  -- Only an OPAQUE screen is marked, and that limit is the whole safety of
+  -- this.  The marker tells the theme "this state is the page", and a page
+  -- that declares no palettes of its own has a whole-screen one synthesised
+  -- for it -- right for a screen that covers the display, and wrong for one
+  -- drawn over the map, where it would take the map with it.  A screen that
+  -- is not opaque is left alone and reaches the theme, if at all, as a panel.
+  local function markPage(screen)
+    if type(screen) == "table" and screen.gen1wildTheme == nil
+        and screen.isOpaque then
+      screen.gen1wildTheme = "suite"
+    end
+    return screen
+  end
+
+  local function marked(factory)
+    if type(factory) ~= "table" or type(factory.new) ~= "function" then
+      return factory
+    end
+    local out = {}
+    for key, value in pairs(factory) do out[key] = value end
+    local build = factory.new
+    out.new = function(...)
+      return markPage(build(...))
+    end
+    return out
+  end
+
+  local screensProxy
+  local function screensFor(screens)
+    if screensProxy then return screensProxy end
+    screensProxy = setmetatable({}, {
+      __index = function(_, key)
+        local value = screens[key]
+        if key ~= "register" or type(value) ~= "function" then
+          if type(value) == "function" then
+            return function(receiver, ...)
+              if receiver == screensProxy then return value(screens, ...) end
+              return value(receiver, ...)
+            end
+          end
+          return value
+        end
+        -- `screens:register(id, factory)` and `screens.register(id, factory)`
+        -- both reach here; the first argument tells them apart.
+        return function(a, b, c, ...)
+          if type(a) == "string" then
+            return value(screens, a, marked(b), c, ...)
+          end
+          return value(screens, b, marked(c), ...)
+        end
+      end,
+    })
+    return screensProxy
+  end
+
+  local contentProxy
+  facade.content = setmetatable({}, {
+    __index = function(_, name)
+      local value = mod.content
+      if type(value) ~= "table" then return nil end
+      local field = value[name]
+      if name == "screens" and type(field) == "table" then
+        return screensFor(field)
+      end
+      if type(field) == "function" then
+        return function(receiver, ...)
+          if receiver == contentProxy then return field(value, ...) end
+          return field(receiver, ...)
+        end
+      end
+      return field
+    end,
+  })
+  contentProxy = facade.content
+
   -- ---- everything else
   --
-  -- events, world, ui, content, input, game, registered, manifest, state and
-  -- whatever the engine grows next, straight through to the real object.
+  -- events, world, ui, input, game, registered, manifest, state and whatever
+  -- the engine grows next, straight through to the real object.  `content` is
+  -- the one that is not: see above.
   return setmetatable(facade, {
     __index = function(_, name)
       local value = mod[name]
