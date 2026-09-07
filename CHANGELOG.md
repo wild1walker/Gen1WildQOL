@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.32.0
+
+Two TRAINER REMATCH fixes on Gold, and both change what happens in a fight.
+
+- **The stake is half the prize now, the way it is on Red.** Both carts
+  multiply the class's base reward by the last party row's level. Red pays that
+  once; Gold pays it **four times** — `Prize.reward` is a *quarter*, and
+  `Prize.award` hands out four of them, split between your wallet and Mom's
+  savings. This arm had copied Red's halving straight over, so a Gold rematch
+  staked an **eighth** of the purse it was about to pay.
+
+  **Gold rematches now cost four times what they were quoting.** That is the
+  price the feature always meant — half of what you win — and it is what Red
+  has charged all along. The count comes from the engine's own `Prize.QUARTERS`
+  rather than a literal, so a cart that changes the split changes this with it.
+
+- **MATCH LEVELS reaches the battle, not just the quote.** Red scales through
+  the `trainer.party` hook and gets a full rebuild for free: the hook is handed
+  the *roster rows* and the engine makes mons out of whatever comes back, so a
+  scaled opponent arrives with its new level's stats, its new level's learnset
+  and full HP.
+
+  Gold calls the same hook with the same arguments, but by then the party is
+  already **built** — so writing `level` there moved the number and little
+  else. `Mon.refreshStats` only clamps HP *downward*, so a trainer scaled up
+  walked in already damaged, and every mon kept the moves its species knew at
+  its *original* level. The quote, meanwhile, was computed off a properly
+  scaled roster, so the price described a fight you were not getting.
+
+  The roster is offset before the battle is built now, which is the same input
+  Red's hook gets. A matched Gold trainer is the same opponent a matched Red
+  one is: right stats, right moves, full HP. The cart's own lookup is copied
+  rather than edited, so a levelled roster cannot leak into the next real
+  fight with that trainer.
+
 ## 1.31.1
 
 - **A rematch you cannot afford now says what it costs.** "You don't have

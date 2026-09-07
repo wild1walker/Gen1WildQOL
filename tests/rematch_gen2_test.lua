@@ -264,9 +264,33 @@ do
   ok(w.said and w.said[1], "the offer comes when the talk has ended")
   eq(Gen2.pending(), nil, "and the arm lets go of the talk")
 
-  -- 20 base x the LAST mon's level, scaled +10 => 16, halved.
-  eq(w.said[1], "Want to battle\nagain?\fThat will be\n160. OK?",
-     "the price is base x the last mon's MATCHED level, halved")
+  -- HALF THE PRIZE, and on Gold the prize is four times what it is on Red.
+  -- Both carts multiply the class's base reward by the LAST party row's
+  -- level; Red pays that once, Gold pays Prize.QUARTERS of them
+  -- (src/battle/gen2/Prize.lua:169, :201).  20 base x the last mon's level
+  -- scaled +10 => 16, is 320 a quarter, 1280 paid, 640 staked.  Copying
+  -- Red's halving straight over staked 160 -- an EIGHTH of the purse.
+  --
+  -- Read off the engine rather than written down, so a cart that changes the
+  -- split moves this with it instead of leaving the number stale.
+  -- READ off the engine, not required from it: Prize pulls in src.core.Strings
+  -- at load and the mod's own directory is what is on package.path here.  The
+  -- rest of this file already reads engine facts out of the source this way
+  -- (the World's method names, Game2's step call, Trainers.lookup's shape),
+  -- and the point is the same -- the number below must be the cart's, not one
+  -- this test made up to agree with the code it is checking.
+  local quarters = 4
+  if ENGINE then
+    local prizeSrc = assert(slurp(ENGINE .. "/src/battle/gen2/Prize.lua"))
+    quarters = tonumber(prizeSrc:match("Prize%.QUARTERS%s*=%s*(%d+)"))
+    ok(quarters ~= nil, "the engine states how many quarters a reward is paid in")
+    eq(quarters, 4, "and Gold pays four of them")
+  end
+  local paid = 20 * 16 * quarters
+  -- math.floor, not `//`: this suite runs under LuaJIT as well as 5.4.
+  eq(math.floor(paid / 2), 640, "half of what this battle pays is 640")
+  eq(w.said[1], "Want to battle\nagain?\fThat will be\n640. OK?",
+     "the price is half of what winning actually pays")
 
   -- The page is up; the YES/NO opens over it.
   w.pendingText()
@@ -276,10 +300,35 @@ do
   ok(w.fought ~= nil, "YES fights them")
   eq(w.fought.entry.name, "JOEY", "against the roster the object carries")
   eq(w.fought.wild, nil, "as a trainer battle, not a wild one")
-  eq(purse(w.game), 5000 - 160, "and the stake is taken up front")
+
+  -- ------- MATCH LEVELS reaches the BATTLE, not just the quote
+  --
+  -- Red scales through the `trainer.party` hook and gets a rebuild for free:
+  -- the hook is handed the ROSTER ROWS and BattleState makes mons out of
+  -- whatever comes back, so a scaled mon arrives with its new level's stats,
+  -- its new level's learnset and full HP.  Gold calls the same hook, but by
+  -- then Trainers.party has already BUILT the party -- so writing `level`
+  -- there moved the number and left the moves and the HP where they were.
+  --
+  -- The roster the battle is built FROM is the same input Red's hook gets,
+  -- so that is what is offset.  This asserts the rows the cart will build
+  -- from, which is the only place the difference shows.
+  local roster = w.fought.entry.roster
+  eq(#roster, 2, "the whole roster is handed over, not just the last row")
+  eq(roster[1].level, 14, "the first row is offset by the same delta")
+  eq(roster[2].level, 16, "and so is the last, which is the one priced")
+  eq(roster[2].level - roster[1].level, 2,
+     "the steps between their mons survive -- an offset, not a multiplier")
+
+  -- The record `trainerParty` hands back is the CART's own lookup.  A
+  -- levelled-up roster left in it would still be there the next time this
+  -- trainer is fought for real, so the scaling copies rather than edits.
+  local fresh = w:trainerParty("YOUNGSTER", "JOEY1")
+  eq(fresh.roster[2].level, 6, "the cart's own roster is left where it was")
+  eq(purse(w.game), 5000 - 640, "and the stake is taken up front")
 
   w.finishBattle("win")
-  eq(purse(w.game), 5000 - 160,
+  eq(purse(w.game), 5000 - 640,
      "a win keeps the stake spent -- the engine pays the other half")
 end
 
@@ -314,7 +363,9 @@ do
   scale = false
   local w = scene()
   w:interactBody(); w.vm.busy = false; w:step()
-  eq(w.said[1], "Want to battle\nagain?\fThat will be\n60. OK?",
+  -- 20 base x 6, the last row's own level: 120 a quarter, 480 paid, 240
+  -- staked.
+  eq(w.said[1], "Want to battle\nagain?\fThat will be\n240. OK?",
      "unscaled, the price is off the party as it stands")
   scale = true
 end
@@ -328,7 +379,7 @@ do
   -- short, which is what made "it always says I can't afford it" impossible
   -- to answer from a report: a price nobody can pay and a purse read out of
   -- the wrong field produce the identical sentence.
-  eq(w.said[1], "You don't have\nenough money.\fA rematch costs\n160.",
+  eq(w.said[1], "You don't have\nenough money.\fA rematch costs\n640.",
      "a price you cannot pay is said so, and named")
   w.pendingText()
   eq(w.choicebox, nil, "and no question is asked")

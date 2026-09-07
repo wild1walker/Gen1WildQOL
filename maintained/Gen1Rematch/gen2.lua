@@ -129,10 +129,27 @@ local function setPurse(save, amount)
   player.money = math.max(0, math.floor(amount))
 end
 
--- The same arithmetic the battle will do: ComputeTrainerReward multiplies the
--- class's base reward by the LAST party row's level, and the party here is
--- the one the battle will fight -- MATCH LEVELS applied, when it is on -- so
--- the quote and the prize are the same numbers.
+-- Half of what the battle will actually pay -- and on Gold that is FOUR TIMES
+-- what it is on Red, which this file had wrong.
+--
+-- Both carts multiply the class's base reward by the LAST party row's level.
+-- Red pays that once (src/battle/BattleState.lua:4848, `prize = baseMoney *
+-- level`).  Gold pays it FOUR times: Prize.reward is a QUARTER, and
+-- Prize.award hands out Prize.QUARTERS of them, split between the wallet and
+-- Mom's savings by wMomSavingMoney (src/battle/gen2/Prize.lua:169, :201).
+--
+-- So Red's `base * level / 2` really is half the purse, and copying it here
+-- staked an EIGHTH of one.  The count comes from the engine rather than a
+-- literal 4, so a cart that changes it changes this with it.
+local function quartersPaid()
+  local Prize = engine("src.battle.gen2.Prize")
+  local n = Prize and tonumber(Prize.QUARTERS)
+  -- No Prize module to ask (an older engine, a total conversion): four is
+  -- what every Gen 2 cart does, and it is better than quietly quoting an
+  -- eighth again.
+  return (n and n > 0) and n or 4
+end
+
 function Gen2.priceOf(world, record, matched, wantPrize, wantScale, game)
   if not wantPrize then return 0 end
   if type(world.trainerParty) ~= "function" then return 0 end
@@ -153,7 +170,7 @@ function Gen2.priceOf(world, record, matched, wantPrize, wantScale, game)
   local last = party[#party]
   local level = type(last) == "table" and tonumber(last.level) or nil
   if not level then return 0 end
-  return math.floor(base * level / 2)
+  return math.floor(base * level * quartersPaid() / 2)
 end
 
 -- ------- the battle
@@ -174,6 +191,39 @@ function Gen2.startBattle(ctx, record, price)
     ctx.log:warn("no roster for trainer class %s member %s; no rematch",
       tostring(record.class), tostring(record.member))
     return false
+  end
+
+  -- ------- MATCH LEVELS, on the ROSTER rather than on the built party
+  --
+  -- Red scales through the `trainer.party` hook and gets a full rebuild for
+  -- free: the hook is handed the ROSTER ROWS and BattleState turns whatever
+  -- comes back into mons afterwards (Pokemon.new per row), so a scaled mon
+  -- arrives at its new level with that level's stats, that level's learnset
+  -- and full HP.
+  --
+  -- Gold calls the same hook with the same three arguments, but by then the
+  -- party is already BUILT (src/battle/gen2/Battle.lua:328 hooks
+  -- `self.enemyParty`, which Trainers.party has already made).  Writing
+  -- `level` on a built mon there moves the number and almost nothing else:
+  -- Mon.refreshStats recomputes the stats but only clamps hp DOWNWARD
+  -- (src/battle/gen2/Mon.lua:270), so a mon scaled up walks in already
+  -- damaged, and its moves stay the ones its species knew at the OLD level
+  -- because Trainers.party read the learnset when it built it.
+  --
+  -- The roster is the same input Red's hook gets, and the cart builds the
+  -- party from it here (World:startScriptedBattle -> Trainers.party), so
+  -- offsetting it before the call is what makes Gold's rematch the same
+  -- fight Red's is.  The record is copied rather than edited: `trainerParty`
+  -- hands back the cart's own lookup, and a levelled-up roster left in it
+  -- would still be there the next time this trainer is fought for real.
+  if ctx.wantScale() then
+    local scaled, rows = pcall(ctx.matched, game, entry.roster)
+    if scaled and type(rows) == "table" and rows[1] then
+      local copy = {}
+      for key, value in pairs(entry) do copy[key] = value end
+      copy.roster = rows
+      entry = copy
+    end
   end
 
   -- Read before anything is charged, so REMATCH PRIZE off is neutral in both
