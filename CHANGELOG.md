@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.30.1
+
+**AUTO SAVE 1.20.2 — picking QUIT with nothing to save no longer crashes.**
+Load a save, open START and choose QUIT before anything has happened and the
+game stopped with `attempt to call field 'unpack' (a nil value)` instead of
+showing the prompt. Nothing had changed yet, so there was no save worth
+offering, and the fallback that hands the row back to the game untouched was
+the broken part — it named `table.unpack`, which the Lua the game runs
+(LuaJIT) does not have. The mod's own bench runs Lua 5.4, where it does, which
+is why the suite covering that exact path stayed green. Fixed in
+Gen1AutoSave, whose harnesses now run under both interpreters; synced here.
+
 ## 1.30.0
 
 **The whole bundle runs on Gold, Silver and Crystal.** The manifest declares

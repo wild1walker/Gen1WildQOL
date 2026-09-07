@@ -41,6 +41,15 @@
 --   * finish the collector's cycle in the frame that wrote the file, and in
 --     the frame a sync cycle ended, rather than on the route after either
 
+-- `unpack` moved between Lua versions, and this mod runs under both.  LOVE is
+-- LuaJIT, which is 5.1: the GLOBAL `unpack` is the one that exists there and
+-- `table.unpack` is nil (the sandbox copies the host's `table` faithfully,
+-- Sandbox.lua:154, so there is nothing to fill it in).  Standalone Lua 5.4 --
+-- which is what tests/ runs under -- is the other way round.  Resolved once,
+-- here, because the expression that used to do it inline was wrong in a way
+-- only the game could show.  See the QUIT wrap below.
+local unpackArgs = unpack or table.unpack
+
 return function(mod)
   local MIN_GAP = 20        -- seconds between any two autosaves
   local SYNC_RETRY = 2.0    -- re-check a busy sync this often
@@ -1964,10 +1973,20 @@ return function(mod)
           if type(item.onSelect) == "function" then
             local original = item.onSelect
             item.gen1autosaveWrapped = true
+            -- Forwarded with its ARITY, not with `{ ... }` alone: a row's
+            -- handler may be called with no arguments at all (Menu.lua:101
+            -- does exactly that), and `#args` cannot tell that from a nil in
+            -- the middle.  What was here before -- `unpack and unpack(args)
+            -- or table.unpack(args)` -- had two faults at once: `a and b or
+            -- c` truncates b to ONE value, so only the first argument was
+            -- ever passed on; and a zero-argument call made that one value
+            -- nil, fell through to the `or`, and reached for a `table.unpack`
+            -- LuaJIT does not have.  Under 5.4 the same line works, which is
+            -- why the bench was green for it.
             item.onSelect = function(...)
-              local args = { ... }
+              local n, args = select("#", ...), { ... }
               return offerQuit(game, function()
-                return original(unpack and unpack(args) or table.unpack(args))
+                return original(unpackArgs(args, 1, n))
               end)
             end
           elseif item.value ~= nil then
