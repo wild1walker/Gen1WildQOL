@@ -218,8 +218,17 @@ eq(Gen2.install(ctx), true, "and a second install is a no-op")
 
 local JOEY = { class = "YOUNGSTER", member = "JOEY1", event = "BEAT_JOEY" }
 
+-- The purse sits where GOLD keeps it, not where Red does.  This harness used
+-- to build `save.money`, which is Red's field (src/ui/ShopMenu.lua) -- so it
+-- agreed with the arm it was testing and both were wrong together, and every
+-- check below passed while the game refused every rematch for want of money.
+-- src/core/gen2/Save.lua:496 normalizes `save.player.money`; :186 seeds it.
+local function purse(game) return game.save.player.money end
+local function setPurse(game, amount) game.save.player.money = amount end
+
 local function scene(money)
-  local game = { save = { money = money or 5000, party = { { level = 30 } } },
+  local game = { save = { player = { money = money or 5000 },
+                          party = { { level = 30 } } },
                  input = { wasPressed = function() return false end } }
   local w = newWorld(game)
   w.faced = { def = { trainer = JOEY } }
@@ -260,10 +269,10 @@ do
   ok(w.fought ~= nil, "YES fights them")
   eq(w.fought.entry.name, "JOEY", "against the roster the object carries")
   eq(w.fought.wild, nil, "as a trainer battle, not a wild one")
-  eq(w.game.save.money, 5000 - 160, "and the stake is taken up front")
+  eq(purse(w.game), 5000 - 160, "and the stake is taken up front")
 
   w.finishBattle("win")
-  eq(w.game.save.money, 5000 - 160,
+  eq(purse(w.game), 5000 - 160,
      "a win keeps the stake spent -- the engine pays the other half")
 end
 
@@ -274,7 +283,7 @@ do
   w:interactBody(); w.vm.busy = false; w:step()
   w.pendingText(); w.pendingChoice(false)
   eq(w.fought, nil, "NO does not start a battle")
-  eq(w.game.save.money, 5000, "and takes no money")
+  eq(purse(w.game), 5000, "and takes no money")
 end
 
 -- ---- REMATCH PRIZE off: no stake, and the payout handed back
@@ -285,10 +294,10 @@ do
   w:interactBody(); w.vm.busy = false; w:step()
   eq(w.said[1], "Want to battle\nagain?", "with the prize off, no price is quoted")
   w.pendingText(); w.pendingChoice(true)
-  eq(w.game.save.money, 5000, "nothing is staked")
-  w.game.save.money = 9999          -- as if the engine had paid out
+  eq(purse(w.game), 5000, "nothing is staked")
+  setPurse(w.game, 9999)            -- as if the engine had paid out
   w.finishBattle("win")
-  eq(w.game.save.money, 5000, "and the engine's payout is put back")
+  eq(purse(w.game), 5000, "and the engine's payout is put back")
   prize = true
 end
 

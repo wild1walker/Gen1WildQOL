@@ -105,6 +105,30 @@ end
 
 -- ------- the money
 --
+-- THE PURSE IS NOT WHERE RED KEEPS IT.  Red's save carries `save.money`
+-- (src/ui/ShopMenu.lua, src/ui/TrainerCard.lua); Gold's carries
+-- `save.player.money` (src/core/gen2/Save.lua:496, and :186 seeds it at 3000
+-- on a new game).  Reading Red's field here answered 0 for every save ever
+-- made, so the gate below refused every rematch with "you don't have enough
+-- money" and the two writes in startBattle charged and refunded a field
+-- nothing else in the engine reads -- a stake that was never taken, on a
+-- purse that never moved.
+--
+-- So the purse is asked for by name, once, and both halves go through the
+-- same pair: a getter that cannot silently answer 0, and a setter that
+-- cannot silently write somewhere harmless.
+local function purseOf(save)
+  local player = type(save) == "table" and save.player
+  return (type(player) == "table" and tonumber(player.money)) or 0
+end
+
+local function setPurse(save, amount)
+  if type(save) ~= "table" then return end
+  local player = save.player
+  if type(player) ~= "table" then return end
+  player.money = math.max(0, math.floor(amount))
+end
+
 -- The same arithmetic the battle will do: ComputeTrainerReward multiplies the
 -- class's base reward by the LAST party row's level, and the party here is
 -- the one the battle will fight -- MATCH LEVELS applied, when it is on -- so
@@ -154,20 +178,20 @@ function Gen2.startBattle(ctx, record, price)
 
   -- Read before anything is charged, so REMATCH PRIZE off is neutral in both
   -- directions -- the stake is not taken and the engine's payout is put back.
-  local purse = (not ctx.wantPrize()) and save and save.money or nil
-  if price > 0 and save then save.money = (save.money or 0) - price end
+  local purse = (not ctx.wantPrize()) and save and purseOf(save) or nil
+  if price > 0 and save then setPurse(save, purseOf(save) - price) end
 
   ctx.arm(true)
   local started, problem = pcall(world.startScriptedBattle, world, entry, nil,
     function(outcome)
-      if outcome == "win" and purse and save then save.money = purse end
+      if outcome == "win" and purse and save then setPurse(save, purse) end
       ctx.done()
     end)
   ctx.arm(false)
 
   if not started then
     -- Put the stake back: nothing was fought for it.
-    if price > 0 and save then save.money = (save.money or 0) + price end
+    if price > 0 and save then setPurse(save, purseOf(save) + price) end
     ctx.log:warn("rematch could not be started: %s", tostring(problem))
     return false
   end
@@ -187,7 +211,7 @@ function Gen2.offer(ctx, record)
 
   local price = Gen2.priceOf(world, record, ctx.matched, ctx.wantPrize(),
     ctx.wantScale(), ctx.game)
-  local purse = (ctx.game and ctx.game.save and ctx.game.save.money) or 0
+  local purse = purseOf(ctx.game and ctx.game.save)
   if price > purse then
     return world:showText(ctx.say(ctx.text.BROKE), function() ctx.done() end)
   end

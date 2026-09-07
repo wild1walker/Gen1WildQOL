@@ -412,7 +412,8 @@ def check_maintained_copies(problems: Problems, quiet: bool) -> None:
                 problems.error(
                     f"maintained/{directory}/{shared} and "
                     f"modules/{directory}/{shared} differ; the copy the game "
-                    "loads is not the source it came from")
+                    "loads is not the source it came from; run "
+                    "python3 tools/build.py")
 
     if not quiet:
         print(f"  maintained: {pairs} module(s) match their copy in modules/")

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.31.0
+
+Two bug reports, one from each game.
+
+- **TRAINER REMATCH on Gold no longer says you cannot afford it.** Every
+  rematch was refused with "You don't have enough money", whatever the purse
+  held, because the Gold arm read `save.money` — which is where *Red* keeps it
+  (`src/ui/ShopMenu.lua`). Gold keeps it at `save.player.money`
+  (`src/core/gen2/Save.lua:496`). So the gate saw 0 every time, and the two
+  writes behind it staked and refunded a field nothing else in the engine
+  reads: a stake that was never taken, on a purse that never moved.
+
+  The suite covering it built its fake save the same wrong way, so the code and
+  its test agreed with each other and not with the game. It builds the purse
+  where Gold keeps it now, and fails against the old field with the reported
+  words.
+
+- **The REMEMBER popup sits where it should on the party menu** (Gen1Remember
+  1.0.2). Its frame opened at `tx = 4, tw = 12` — narrower than the party
+  menu's own bottom message for a short pool, so the message showed past both
+  sides of it, and wide enough for a long one (POISONPOWDER L22) that `Menu`
+  nudged the frame left onto the party's sprite column. It is full width and
+  hard against the bottom edge now, which is the cart's own shape for that part
+  of the screen.
+
 ## 1.30.1
 
 **AUTO SAVE 1.20.2 — picking QUIT with nothing to save no longer crashes.**

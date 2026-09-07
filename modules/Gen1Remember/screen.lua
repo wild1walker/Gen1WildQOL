@@ -172,11 +172,34 @@ return function(mod, Relearn)
       }
     end
 
+    -- ------- where the box goes, and why it is the whole width
+    --
+    -- FULL WIDTH, hard against the bottom edge.  Both halves are load
+    -- bearing and the old numbers -- `tx = 4, tw = 12` -- got both wrong,
+    -- in a way that only showed up on a real party screen:
+    --
+    --   * Menu GROWS tw to the widest label and then nudges tx left to keep
+    --     the frame on screen (src/ui/Menu.lua:24-35).  A pool with
+    --     POISONPOWDER in it needs 19 tiles, so tx went 4 -> 1 and the box
+    --     came down on the party's SPRITE COLUMN.
+    --   * and when the labels were short it did not move at all, so the
+    --     party menu's own bottom message -- drawn underneath by
+    --     PartyMenu:draw, which this popup does not replace -- stayed
+    --     visible on BOTH sides of the frame: "Cho" to the left of it and
+    --     "N." to the right.
+    --
+    -- 0..20 covers that message completely and cannot be nudged anywhere,
+    -- and it is the cart's own shape for the bottom of this screen:
+    -- `Font.drawBox(0, 12, 20, 6)` is the party menu's message box and
+    -- `Font.drawBox(4, 7, 16, 6)` is MoveLearnMenu's forget list, both
+    -- flush to the right edge.  The interior is 17 columns, which takes the
+    -- longest name in the cart's own dataset (POISONPOWDER, THUNDERSHOCK)
+    -- with its level beside it and still never grows the frame.
     local th = math.min(#items, VISIBLE) * 2 + 2
     local menu = Menu.new(game, items, {
       -- hung off the bottom edge the way the party menu's own submenu is, so
       -- the POKéMON the popup is about stays visible above it
-      tx = 4, ty = math.max(0, 18 - th), tw = 12, th = th,
+      tx = 0, ty = math.max(0, 18 - th), tw = 20, th = th,
       maxVisible = VISIBLE,
       -- No title on the frame.  The row that opened this popup already said
       -- REMEMBER and the box comes up over it, so a heading repeats the word
