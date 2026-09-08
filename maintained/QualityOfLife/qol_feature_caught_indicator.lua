@@ -82,9 +82,34 @@ local feature = {
 --     and the exp bar looks broken" was one bug.
 --
 -- Every row of both balls is drawn from contiguous runs, so marking runs
--- costs seven rects for the Gen 1 ball and nine for the Gen 2 one, covers
--- exactly the pixels drawn and no transparent ones, and leaves the skirt to
--- fall where it belongs: round the ball's own silhouette.
+-- costs seven rects for the Gen 1 ball and nine for the Gen 2 one, and covers
+-- exactly the pixels drawn and no transparent ones.
+--
+-- That fixed the BUDGET and not the ball, and the report came back.  DARK
+-- paints its one-pixel skirt round every mark, suppressed only where it lands
+-- inside a rect ALREADY recorded -- so each run's skirt reached into the
+-- CONCAVE corners the next row has not drawn yet and the row above never
+-- draws at all.  Twelve pixels of dark inside the ball's own 7x7: the rounded
+-- blob again, from seven rects instead of thirty-seven.
+--
+-- A skirt hides the seam where art the theme did not draw meets a shaded page.
+-- This ball has no seam.  It is flat colour drawn here, pixel by pixel, and
+-- this function knows exactly which pixels those are -- so it marks through
+-- the theme's FLAT mark, which records the rect (the ART_PAGE zone is what
+-- keeps the colour) and draws nothing round it.
+--
+-- By name, and falling back to the plain mark, for a reason worth stating:
+-- this bundle has no runtime/theme.lua and no `mod.theme`, so a contract that
+-- went through the theme object could not reach this file at all.  The name is
+-- the interface, and a build with no theme installed marks exactly as before.
+local FLAT_MARK = "__gen1WildMarkFlat"
+
+local function markFlat(PaletteFX, x, y, w, h)
+  local flat = rawget(PaletteFX, FLAT_MARK)
+  if type(flat) == "function" then return flat(x, y, w, h) end
+  return PaletteFX.markTrueColor(x, y, w, h)
+end
+
 local function drawBallRows(rows, x, y, scale, colors, mark)
   local g = love.graphics
   scale = scale or 1
@@ -100,8 +125,8 @@ local function drawBallRows(rows, x, y, scale, colors, mark)
         runFrom = runFrom or px
       elseif runFrom then
         if PaletteFX then
-          PaletteFX.markTrueColor(x + (runFrom - 1) * scale, dotY,
-                                  (px - runFrom) * scale, scale)
+          markFlat(PaletteFX, x + (runFrom - 1) * scale, dotY,
+                   (px - runFrom) * scale, scale)
         end
         runFrom = nil
       end

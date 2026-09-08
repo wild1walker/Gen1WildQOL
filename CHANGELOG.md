@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.32.2
+
+- **The caught indicator's POKéBALL is a POKéBALL again under DARK.** Reported
+  twice. 1.32.1 cut its marks from thirty-seven to seven — one per contiguous
+  row-run rather than one per pixel — which was a real problem (thirty-seven
+  of the frame's forty art rects went on one icon, so the EXP bar's own mark
+  fell off the end and lost the zone that themes it). It was not *this*
+  problem, and the report came back.
+
+  The ring is. DARK paints a one-pixel skirt round every true-colour mark
+  inside a box, suppressed only where it lands inside a rect **already**
+  recorded — so each run's skirt reached into the concave corners the next row
+  has not drawn yet and the row above never draws at all. Twelve pixels of
+  dark inside the ball's own 7x7: the rounded blob again, from seven rects
+  instead of thirty-seven.
+
+  A skirt hides the seam where art the theme did not draw meets a shaded page.
+  This ball has no seam — it is flat colour drawn pixel by pixel by the
+  feature itself. It marks through the theme's **flat mark** now, which
+  records the rect (the ART_PAGE zone is what keeps the colour) and draws
+  nothing round it. Reached by name and falling back to the ordinary mark,
+  because this bundle has no `runtime/theme.lua` and no `mod.theme` — a
+  contract routed through the theme object could not have reached this file at
+  all.
+
 ## 1.32.1
 
 - **Under DARK, the caught marker is a POKéBALL again — and the EXP bar comes
