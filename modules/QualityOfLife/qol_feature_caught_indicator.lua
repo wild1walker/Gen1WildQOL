@@ -102,18 +102,18 @@ local feature = {
 -- this bundle has no runtime/theme.lua and no `mod.theme`, so a contract that
 -- went through the theme object could not reach this file at all.  The name is
 -- the interface, and a build with no theme installed marks exactly as before.
-local FLAT_MARK = "__gen1WildMarkFlat"
-
-local function markFlat(PaletteFX, x, y, w, h)
-  local flat = rawget(PaletteFX, FLAT_MARK)
-  if type(flat) == "function" then return flat(x, y, w, h) end
-  return PaletteFX.markTrueColor(x, y, w, h)
-end
-
+-- Resolved INSIDE this function rather than beside it, and deliberately:
+-- tests/caughtmark_test.lua lifts drawBallRows out of this file by source text
+-- and runs it on its own, so a helper in the enclosing chunk is a helper the
+-- suite cannot see.  A function that reaches for nothing outside itself is one
+-- that can be tested as itself.
 local function drawBallRows(rows, x, y, scale, colors, mark)
   local g = love.graphics
   scale = scale or 1
   local PaletteFX = mark and require("src.render.PaletteFX") or nil
+  local markRect = PaletteFX
+    and (rawget(PaletteFX, "__gen1WildMarkFlat") or PaletteFX.markTrueColor)
+    or nil
   for py, row in ipairs(rows) do
     local dotY = y + (py - 1) * scale
     local runFrom = nil
@@ -124,8 +124,8 @@ local function drawBallRows(rows, x, y, scale, colors, mark)
         g.rectangle("fill", x + (px - 1) * scale, dotY, scale, scale)
         runFrom = runFrom or px
       elseif runFrom then
-        if PaletteFX then
-          markFlat(PaletteFX, x + (runFrom - 1) * scale, dotY,
+        if markRect then
+          markRect(x + (runFrom - 1) * scale, dotY,
                    (px - runFrom) * scale, scale)
         end
         runFrom = nil

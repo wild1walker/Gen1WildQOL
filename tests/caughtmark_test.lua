@@ -72,11 +72,27 @@ local love = {
 }
 _G.love = love
 
-package.loaded["src.render.PaletteFX"] = {
+-- Two doors into the same recording, so the suite can say WHICH one the ball
+-- went through.  The theme installs the second (Gen1WildUI runtime/theme.lua,
+-- MARK_FLAT): it records the rect but paints no ring round it, which is the
+-- half of this bug that the run-marking did not fix.
+local flat
+local PaletteFX = {
   markTrueColor = function(x, y, w, h)
-    marks[#marks + 1] = { x = x, y = y, w = w, h = h }
+    marks[#marks + 1] = { x = x, y = y, w = w, h = h, flat = false }
   end,
 }
+package.loaded["src.render.PaletteFX"] = PaletteFX
+local function withFlatMark(present)
+  if present then
+    PaletteFX.__gen1WildMarkFlat = function(x, y, w, h)
+      marks[#marks + 1] = { x = x, y = y, w = w, h = h, flat = true }
+    end
+  else
+    PaletteFX.__gen1WildMarkFlat = nil
+  end
+end
+withFlatMark(true)
 
 local drawBallRows = assert(load(body .. "\nreturn drawBallRows"))()
 
@@ -85,6 +101,32 @@ local COLORS = { x = { 0, 0, 0 }, d = { 90, 90, 90 }, l = { 200, 200, 200 } }
 local function run(rows, scale, mark)
   drawn, marks = {}, {}
   drawBallRows(rows, 10, 20, scale, COLORS, mark)
+end
+
+-- ---- and through the mark that draws no ring round it
+--
+-- The run-marking fixed the BUDGET and not the ball, and the report came back.
+-- DARK rings every mark, suppressed only inside a rect ALREADY recorded, so
+-- each run's ring reached into the concave corners the next row has not drawn
+-- yet and the row above never draws -- twelve pixels of dark inside the ball's
+-- own 7x7.  A skirt hides the seam where art the theme did not draw meets a
+-- shaded page; this ball has no seam, and marks flat.
+
+do
+  io.write("the ball marks flat, so nothing is drawn round it\n")
+  run(ROWS, 1, true)
+  local flatCount = 0
+  for _, m in ipairs(marks) do if m.flat then flatCount = flatCount + 1 end end
+  eq(flatCount, #marks, "every run goes through the flat mark")
+
+  -- and a build with no theme installed marks exactly as it always did
+  withFlatMark(false)
+  run(ROWS, 1, true)
+  eq(#marks, 7, "with no theme there are still seven rects")
+  local plain = 0
+  for _, m in ipairs(marks) do if not m.flat then plain = plain + 1 end end
+  eq(plain, #marks, "reported through the ordinary mark, as before")
+  withFlatMark(true)
 end
 
 -- ---- one rect per run
