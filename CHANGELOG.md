@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.33.0
+
+### Removed
+
+- **The Gen 2 cart save shim.** `src/core/gen2/Save.lua` used to name its file
+  out of the VERSION alone, so a cart on Gold, Silver or Crystal read and wrote
+  the *base game's* playthrough — and registered its slot in the base game's
+  launcher list on the way. `runtime/cartsave2.lua` rewrote those paths on
+  their way to disk.
+
+  The engine does it itself now (gen1recomp `5920402`, first released in
+  **v0.2.57**), and to the same filenames the shim produced —
+  `save_cart_<id>.lua` flat, `saves/cart_<id>/<slot>.lua` with a slot — so
+  **no save moves**: a Wild Crystal playthrough is exactly where it was.
+
+  Two layers scoping one path is how a fix becomes the next bug, so the shim
+  is gone rather than left as a no-op, and `tests/cartsave2_test.lua` keeps
+  its harness and changes what it is for: it now asserts the *engine* does the
+  scoping, and that this bundle does not do it a second time. It fails against
+  an engine without the fix, which is what the floor below is for.
+
+### Changed
+
+- **The engine floor is `>=0.2.57`**, up from `>=0.1.37`. That is the release
+  carrying the fix above. Dropping the shim without raising the floor would
+  have left anyone on an older build writing their cart's Gold save into the
+  base game again, which is the bug the shim existed for.
+
 ## 1.32.2
 
 - **The caught indicator's POKéBALL is a POKéBALL again under DARK.** Reported

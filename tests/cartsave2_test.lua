@@ -1,22 +1,26 @@
--- A Gen 2 cart keeps its own save, checked against the CART's own SaveData.
+-- A Gen 2 cart keeps its own save -- checked against the ENGINE, which is
+-- what does it now.
 --
--- This one is engine-backed rather than stubbed, and deliberately so.  The
--- whole fix is a claim about two modules that disagree with each other:
+-- This suite used to test a shim.  `src/core/gen2/Save.lua` named its file out
+-- of the VERSION alone, so a cart on Gold, Silver or Crystal read and wrote the
+-- base game's playthrough and registered its slot in the base game's registry
+-- on the way, and runtime/cartsave2.lua rewrote the paths on their way to disk.
+-- The first thing the file did was REPRODUCE that bug against the untouched
+-- modules, with a note saying that if a later engine fixed `saveNames` itself,
+-- that assertion is the one that would fail and the runtime should come out
+-- rather than be adjusted.
 --
---   * src/core/SaveData.lua scopes a cart's saves by cart id, and the
---     launcher lists them from that scope;
---   * src/core/gen2/Save.lua names its file out of the VERSION alone, and so
---     reads and writes the base game's playthrough instead.
+-- A later engine did (gen1recomp 5920402, first released in v0.2.57), to the
+-- SAME filenames the shim produced -- `save_cart_<id>.lua` flat and
+-- `saves/cart_<id>/<slot>.lua` with a slot -- so no save moved on anybody's
+-- disk when the shim came out.  The bundle's floor is that release, which is
+-- what makes the deletion safe rather than merely tidy.
 --
--- A stub of either would be written by the same hand that has to be right
--- about the disagreement, so it would agree with whichever half that hand
--- misread.  The two shapes this rests on -- `saveNames` reading
--- `SaveData.activeSlot`, and `Save.save` conjuring a slot when it answers nil
--- -- are the engine's, and this file reads them from the engine.
---
--- So the first thing it does is REPRODUCE the bug against the untouched
--- modules.  If a later engine fixes `saveNames` itself, that assertion is the
--- one that fails, and this runtime should come out rather than be adjusted.
+-- So the file kept its harness and changed what it is FOR.  Everything below
+-- is the engine's own behaviour, asserted against the real modules, because
+-- this is a promise about where a player's Crystal cart save lives and a
+-- silent regression in it loses playthroughs.  It also asserts the shim is
+-- gone: two layers scoping the same path is how a fix becomes the next bug.
 --
 -- Run:  luajit tests/cartsave2_test.lua
 
@@ -114,36 +118,40 @@ local function forgetSaves()
   end
 end
 
--- ---- 1. the untouched engine, with no cart: already correct
+-- ---- 1. no cart: the base game's own file, untouched
 
 eq(Save2.filenames("crystal"), "save_crystal.lua",
    "with no cart the Gen 2 save layer names the base game's file")
 eq(SaveData.persistenceFs(), love.filesystem,
    "with no cart the persistence seam is the real filesystem")
 
--- ---- 2. the bug, reproduced
+-- ---- 2. the engine scopes a cart itself
 
 SaveData.setCart(CART, "hash")
-eq(Save2.filenames("crystal"), "save_crystal.lua",
-   "BUG: with the cart active the Gen 2 save layer still names save_crystal.lua")
+ok(Save2.filenames("crystal") ~= "save_crystal.lua",
+   "with the cart active the Gen 2 save layer does NOT name the base game's "
+   .. "file -- which is the whole bug, and the engine's to answer now")
+
+-- ---- 3. and this bundle does not scope it a second time
+--
+-- Not a style check.  The shim rewrote a path on its way to disk; the engine
+-- now hands it over already rewritten, and a second pass over an
+-- already-scoped path is how a fix turns into the next bug.  So the file is
+-- gone and nothing loads it.
+
 do
-  -- and a slot registered in the cart's own scope does not move it either:
-  -- `saveNames` resolves the slot through the VERSION, so it never sees one.
-  local id = SaveData.createCartSlot(CART)
-  SaveData.setActiveCartSlot(CART, id)
-  eq(Save2.filenames("crystal"), "save_crystal.lua",
-     "BUG: a registered CART slot does not move it either")
-  -- put the cart's registry back to empty so the flat branch is testable below
-  SaveData.deleteCartSlot(CART, id)
+  local shim = io.open("runtime/cartsave2.lua")
+  if shim then shim:close() end
+  ok(shim == nil,
+     "runtime/cartsave2.lua is gone: the engine does this, and two layers "
+     .. "scoping one path is worse than neither")
+
+  local handle = assert(io.open("runtime/bundle.lua"))
+  local text = handle:read("*a")
+  handle:close()
+  ok(text:find('loadRuntime("cartsave2")', 1, true) == nil,
+     "and the bundle does not reach for it")
 end
-eq(tostring(SaveData.activeCartSlot(CART)), "nil",
-   "the cart's registry is empty again before the fix goes in")
-
--- ---- 3. the fix
-
-local CartSave2 = chunkOf("runtime/cartsave2.lua")
-local installed, why = CartSave2.install()
-ok(installed, "install reports success (" .. tostring(why) .. ")")
 
 -- ---- 4. the flat branch: a cart with no slot of its own
 
@@ -151,82 +159,45 @@ forgetSaves()
 eq(whereAGoldSaveLands(), "save_cart_" .. CART .. ".lua",
    "with no cart slot a Gold save lands on the cart's flat name")
 
--- ---- 5. Save.save's own slot bookkeeping goes to the cart's registry
---
--- src/core/gen2/Save.lua:914 asks `SaveData.activeSlot(version)` and, when it
--- answers nil, calls `createSlot` + `setActiveSlot` in the VERSION's name.
--- Unwrapped that registers the cart's playthrough in the launcher's Crystal
--- list.  This is that exact sequence.
+-- ---- 5. the slot branch: the file lands where the launcher looks
 
-eq(tostring(SaveData.activeSlot("crystal")), "nil",
-   "before the first save the cart has no slot")
-local made = SaveData.createSlot("crystal")
-SaveData.setActiveSlot("crystal", made)
+local made = SaveData.createCartSlot(CART)
+SaveData.setActiveCartSlot(CART, made)
+forgetSaves()
+
+local main, bak, tmp = Save2.filenames("crystal")
+eq(main, "saves/cart_" .. CART .. "/" .. made .. ".lua",
+   "the Gen 2 save layer names the CART's own slot file")
+eq(whereAGoldSaveLands(), main, "and the bytes land in it")
+-- .bak and .tmp travel with it, so a crash mid-write recovers from the cart's
+-- own copies rather than the base game's.
+eq(bak, main .. ".bak", "the backup is beside it")
+eq(tmp, main .. ".tmp", "and the write witness")
+eq(main:match("^(.*)/[^/]+$"), "saves/cart_" .. CART,
+   "in the cart's own directory, which is where the launcher looks")
+
+-- ---- 6. and the base game's registry is left alone
+--
+-- The other half of the bug, and the quieter one: a cart's first save used to
+-- register a slot in the BASE GAME's list, so a Crystal the player had never
+-- started grew a playthrough in the launcher.
+
 local opts = SaveData.loadOptions()
 eq(tostring(opts.saveSlots and opts.saveSlots.crystal), "nil",
-   "no phantom slot is registered against the base game")
+   "no phantom slot against the base game")
 local reg = opts.cartSlots and opts.cartSlots[CART]
 eq(reg and reg.list and reg.list[1], made,
-   "the slot went into the cart's own registry")
+   "the slot is in the cart's own registry")
 eq(SaveData.activeCartSlot(CART), made, "and it is the cart's active slot")
 
--- ---- 6. the slot branch: the file lands where the launcher looks
-
-forgetSaves()
-eq(Save2.filenames("crystal"), "saves/crystal/" .. made .. ".lua",
-   "the Gen 2 save layer now names the CART's slot id")
-eq(whereAGoldSaveLands(), "saves/cart_" .. CART .. "/" .. made .. ".lua",
-   "and the bytes land in the cart's slot directory")
--- .bak and .tmp travel with it, so a crash mid-write recovers from the
--- cart's own copies rather than the base game's.
-local main, bak, tmp = Save2.filenames("crystal")
-eq(CartSave2.rewrite(bak, CartSave2.targets("crystal", CART)),
-   "saves/cart_" .. CART .. "/" .. made .. ".lua.bak", "the backup moves too")
-eq(CartSave2.rewrite(tmp, CartSave2.targets("crystal", CART)),
-   "saves/cart_" .. CART .. "/" .. made .. ".lua.tmp", "and the write witness")
--- Save.save creates the parent before staging; the directory has to move as
--- well or the write goes to a folder the launcher never reads.
-eq(CartSave2.rewrite(main:match("^(.*)/[^/]+$"),
-                     CartSave2.targets("crystal", CART)),
-   "saves/cart_" .. CART, "the parent directory moves with it")
-
--- ---- 7. everything that is not a base-game save path is untouched
-
-local map = CartSave2.targets("crystal", CART)
-for _, path in ipairs({
-  "options.lua",
-  "options.lua.bak",
-  "save_cart_" .. CART .. ".lua",
-  "saves/cart_" .. CART .. "/slot1.lua",
-  "saves/gold/slot1.lua",
-  "save_gold.lua",
-  "mods/storage/whatever.lua",
-}) do
-  eq(CartSave2.rewrite(path, map), path, path .. " passes through")
-end
-
--- ---- 8. the narrowing: a question about another game gets the other game's answer
---
--- ModProfile.capture walks every version asking `activeSlot` for each.  A
--- cart's slot id is an answer about THIS playthrough, so only the running
--- version's question is redirected.
-
-SaveData.setActiveSlot("gold", "slot1")
-eq(tostring(SaveData.activeSlot("gold")), "slot1",
-   "a question about Gold is still answered by Gold")
-eq(SaveData.activeSlot("crystal"), made,
-   "and a question about the running version by the cart")
-
--- ---- 9. handing back to the launcher takes it all down
+-- ---- 7. handing back to the launcher takes it all down
 
 SaveData.setCart(nil)
 eq(SaveData.persistenceFs(), love.filesystem,
    "with the cart cleared the persistence seam is the real filesystem again")
-eq(tostring(SaveData.activeSlot("crystal")), "nil",
-   "and the base game's slot resolution is its own again")
 forgetSaves()
 eq(whereAGoldSaveLands(), "save_crystal.lua",
-   "so the base game writes its own save once more")
+   "and the base game writes its own save once more")
 
 io.write(("cartsave2: %d passed, %d failed\n"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)
