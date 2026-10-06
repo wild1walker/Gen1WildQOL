@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.34.0
+
+### Added
+
+- **FireRed, LeafGreen and Emerald.** The manifest claims `gen3`, and five
+  features install on a Gen 3 boot, each through the cart's own seams:
+  - **SPRINT** — B runs before the Running Shoes (**RUN BEFORE THE SHOES**)
+    and indoors on Emerald (**RUN INDOORS**). The cart's per-tile rules —
+    long grass, hot springs, Pacifidlog's logs, the Fortree bridge — stand.
+  - **EXP SHARE** — the bench gains beside the fighters: **GEN 5+** (half a
+    fighter's share; the default), **BALANCED**, **AVERAGE** or **CUSTOM**.
+    The fighters and any holder of the cart's Exp. Share are paid exactly as
+    the cart pays them. Level-ups and new moves are shown one by one; the
+    bench's lines fold into *The rest of the party gained EXP. Points!*
+  - **REUSABLE TMS** — a TM is given back after the teach spends it, on both
+    of the cart's paths (a free slot, or the forget-a-move prompt).
+  - **AUTO SAVE** — after battles, catches, evolutions and new maps, or on an
+    interval, through the cart's own save on the first frame the cart would
+    let you save, never mid-step and never twice in fifteen seconds.
+  - **SOUND** — the low-HP siren beeps its count and stops; FireRed raises
+    the same hook with the same ctx.
+
+  The rest are not loaded on Gen 3 — each is a screen or service the GBA
+  already has, or one game's own content; the README says which and why.
+
+### Changed
+
+- `runtime/bundle.lua` knows three generations, not two. On Gen 3 a feature
+  runs only if `features.lua` says `gen3`, and the bundle's own menu is not
+  installed: the options are in the engine's GBA mod manager.
+- The Gen 3 arms are maintained here, in `maintained/Gen3QOL/`.
+  `tools/build.py` builds a folder a feature names in its `gen3` entry, and
+  `tools/check.py` checks that a feature's Gen 3 entry exists.
+
 ## 1.33.0
 
 ### Removed

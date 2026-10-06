@@ -22,12 +22,65 @@ local loadRuntime = ...
 
 local Bundle = {}
 
-local function detectGen2()
+-- Which game this boot is: 1 for Red, Blue and Yellow, 2 for Gold, Silver and
+-- Crystal, 3 for FireRed, LeafGreen and Emerald.  Asked of the engine's own
+-- GameVersion first, because that is what every Gen 2 arm in this suite has
+-- always asked and a test that stubs it gets the answer it set; the mod
+-- API's `generation` is the fallback for a host whose GameVersion cannot say.
+-- Anything else is Red: the bundle shipped Gen 1-only for a year, and a boot
+-- this cannot classify is likelier to be that than anything new.
+local function detectGeneration(mod)
   local ok, GameVersion = pcall(require, "src.core.GameVersion")
-  if not ok or type(GameVersion) ~= "table" then return false end
-  if type(GameVersion.generation) ~= "function" then return false end
-  local okCall, generation = pcall(GameVersion.generation)
-  return okCall and generation == 2
+  if ok and type(GameVersion) == "table"
+      and type(GameVersion.generation) == "function" then
+    local okCall, generation = pcall(GameVersion.generation)
+    if okCall and (generation == 1 or generation == 2 or generation == 3) then
+      return generation
+    end
+  end
+  local generation = type(mod) == "table" and mod.generation or nil
+  if generation == 2 or generation == 3 then return generation end
+  return 1
+end
+
+-- ------- which features run on which game
+--
+-- Red and Gold are answered by two flags a feature may carry, `gen1_only` and
+-- `gen2_only`, and everything without one runs on both -- which was right for
+-- two games that share the Gen 1 module API through a compat layer.
+--
+-- FireRed, LeafGreen and Emerald do not.  Their engine is its own (src/core/
+-- game3), the Gen 1 facades cover FireRed and LeafGreen only and cover them
+-- thinly, and a feature written against Red's screens has nothing on a GBA
+-- screen to draw on.  So Gen 3 is opt IN: a feature runs there only when it
+-- says `gen3`, and says how --
+--
+--   gen3 = true                    the feature's own entry runs unchanged;
+--                                  it was written against hooks Gen 3 calls.
+--   gen3 = { entry = "gen3.lua" }  a different entry in the same folder, and
+--                                  any other field given replaces the
+--                                  feature's own for this boot (`adapter =
+--                                  false` drops the adapter).
+--
+-- Everything without one is simply not offered on Gen 3: no row, no hook, no
+-- require.  README.md says which and why for each.
+function Bundle.runsOn(feature, generation)
+  if generation == 3 then
+    return feature.gen3 ~= nil and feature.gen3 ~= false
+  end
+  if feature.gen2_only and generation ~= 2 then return false end
+  if feature.gen1_only and generation == 2 then return false end
+  return true
+end
+
+function Bundle.forGeneration(feature, generation)
+  if generation ~= 3 or type(feature.gen3) ~= "table" then return feature end
+  local out = {}
+  for k, v in pairs(feature) do out[k] = v end
+  for k, v in pairs(feature.gen3) do
+    if v == false then out[k] = nil else out[k] = v end
+  end
+  return out
 end
 
 function Bundle.install(mod, spec, features)
@@ -77,6 +130,8 @@ function Bundle.install(mod, spec, features)
     pcall(Settings.watch, mod)
   end
 
+  local generation = detectGeneration(mod)
+
   local loader = Loader.new(mod)
   local optionset = OptionSet.new()
   -- Optional: absent on a tree built before build.py wrote it, in which case
@@ -94,7 +149,10 @@ function Bundle.install(mod, spec, features)
     optionset = optionset,
     registry = registry,
     loader = loader,
-    isGen2 = detectGen2(),
+    -- 1, 2 or 3; see detectGeneration.  `isGen2` stays because features
+    -- read it.
+    generation = generation,
+    isGen2 = generation == 2,
     shared = {},
     -- Which voxel mod is installed, if any.  Built once for the bundle: the
     -- lookup is memoised in there, so a dozen features asking costs one
@@ -108,12 +166,9 @@ function Bundle.install(mod, spec, features)
   -- ---- 1. master switches first
 
   local active = {}
-  for _, feature in ipairs(features) do
-    if feature.gen2_only and not context.isGen2 then
-      -- nothing
-    elseif feature.gen1_only and context.isGen2 then
-      -- nothing
-    else
+  for _, declared in ipairs(features) do
+    if Bundle.runsOn(declared, context.generation) then
+      local feature = Bundle.forGeneration(declared, context.generation)
       optionset.master(feature)
       feature.live_toggle = feature.enabledKey ~= nil
       active[#active + 1] = feature
@@ -279,7 +334,15 @@ function Bundle.install(mod, spec, features)
   for _, feature in ipairs(active) do
     menu.noteInstalled(feature, installed[feature.id] == true)
   end
-  menu.install()
+  -- Not on Gen 3.  The menu is a set of screens drawn in Red's and Gold's
+  -- chrome, registered through a registry FireRed has no target for, plus a
+  -- route that sends MODS > OPTIONS to them -- and that route is the shared
+  -- manager's, so on a GBA boot it would push a Gen 1 screen into the GBA
+  -- manager.  FireRed's own MOD OPTIONS lists the schema instead, which is
+  -- every master switch and every row, and that is the whole menu there.
+  if context.generation ~= 3 then
+    menu.install()
+  end
 
   -- ---- what the other half of the pair can see
 

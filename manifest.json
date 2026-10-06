@@ -1,7 +1,7 @@
 {
   "id": "gen1_wild_qol",
   "name": "Gen1WildQOL",
-  "version": "1.33.0",
+  "version": "1.34.0",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -32,12 +32,13 @@
   "incompatible": [],
   "games": [
     "gen1",
-    "gen2"
+    "gen2",
+    "gen3"
   ],
   "experimental": false,
   "permissions": [
     "engine_internals"
   ],
   "github": "wild1walker/Gen1WildQOL",
-  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound, followers, all 151, EXP share, the move reminder, menu layout and the mod manager. Every feature switches on and off by itself."
+  "description": "The quality-of-life half of the Gen1Wild suite in one mod: sprinting, autosave, auto continue, sound, followers, all 151, EXP share, the move reminder, menu layout and the mod manager. Every feature switches on and off by itself. On FireRed, LeafGreen and Emerald: sprinting, EXP share, reusable TMs, autosave and sound."
 }

@@ -39,6 +39,7 @@ import argparse
 import filecmp
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -129,6 +130,14 @@ def read_registry() -> list[dict]:
                 value = stripped[len(token):].split('"', 1)[0]
                 if current is not None:
                     current[key] = value
+        # A feature's Gen 3 arm may live in a folder of its own -- `gen3 = {
+        # dir = "Gen3QOL", ... }` -- which runtime/bundle.lua loads on a GBA
+        # boot instead of the feature's own.  It is a source like any other,
+        # so it is built like any other; without this it is never copied and
+        # the Gen 3 boot finds nothing to load.
+        gen3 = re.search(r'\bgen3\s*=\s*\{[^}]*?\bdir\s*=\s*"([^"]+)"', stripped)
+        if gen3 and current is not None:
+            current.setdefault("gen3_dirs", []).append(gen3.group(1))
 
         if stripped.startswith("},") and current:
             if "dir" in current:
@@ -236,6 +245,8 @@ def build(destination: Path) -> list[str]:
     wanted: dict[str, list[dict]] = {}
     for feature in features:
         wanted.setdefault(feature["dir"], []).append(feature)
+        for gen3_dir in feature.get("gen3_dirs", ()):
+            wanted.setdefault(gen3_dir, []).append(feature)
 
     lines: list[str] = []
     missing: list[str] = []

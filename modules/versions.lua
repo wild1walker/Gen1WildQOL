@@ -13,5 +13,6 @@ return {
   ["Gen1Remember"] = "1.0.2",
   ["Gen1SoundQOL"] = "0.3.0",
   ["Gen1Sprint"] = "0.3.1",
+  ["Gen3QOL"] = "maintained",
   ["QualityOfLife"] = "maintained",
 }

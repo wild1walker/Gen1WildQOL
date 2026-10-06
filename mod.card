@@ -20,6 +20,10 @@ return {
         .. "mods and are maintained in this repository now, which changes "
         .. "who looks after the code and not who wrote it -- the credits "
         .. "below stand either way",
+      "FireRed, LeafGreen and Emerald: SPRINT, EXP SHARE, REUSABLE TMS, "
+        .. "AUTO SAVE and SOUND run there through the cart's own seams. The "
+        .. "rest are screens or content the GBA already has, and are not "
+        .. "loaded on a Gen 3 boot at all",
       "MENU LAYOUT and MOD MANAGER, which Gen1WildUI also carries. They "
         .. "are the furniture every other feature is reached through, so "
         .. "neither half goes without them. With both bundles installed the "
