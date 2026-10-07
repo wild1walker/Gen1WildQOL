@@ -12,13 +12,19 @@
   - **EXP SHARE** — the bench gains beside the fighters: **GEN 5+** (half a
     fighter's share; the default), **BALANCED**, **AVERAGE** or **CUSTOM**.
     The fighters and any holder of the cart's Exp. Share are paid exactly as
-    the cart pays them. Level-ups and new moves are shown one by one; the
-    bench's lines fold into *The rest of the party gained EXP. Points!*
+    the cart pays them, and a fighter's share is what the cart really pays a
+    fighter — half the pool when anyone holds an Exp. Share — so the bench
+    never outgains the Pokémon that fought. Level-ups and new moves are shown
+    one by one; the bench's lines fold into *The rest of the party gained EXP.
+    Points!* Its switch takes effect from the next award, since the GBA mod
+    manager has no relaunch cue, and its mode row is **SHARE MODE**.
   - **REUSABLE TMS** — a TM is given back after the teach spends it, on both
     of the cart's paths (a free slot, or the forget-a-move prompt).
   - **AUTO SAVE** — after battles, catches, evolutions and new maps, or on an
     interval, through the cart's own save on the first frame the cart would
-    let you save, never mid-step and never twice in fifteen seconds.
+    let you save, never mid-step and never twice in fifteen seconds. It never
+    saves a NEW GAME you have not saved yourself: a GBA cart has one save
+    file, and only your own SAVE asks before writing over it.
   - **SOUND** — the low-HP siren beeps its count and stops; FireRed raises
     the same hook with the same ctx.
 

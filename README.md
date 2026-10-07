@@ -249,14 +249,18 @@ the bicycle and diving.
 
 The fighters are paid exactly as the cart pays them, and so is anyone holding
 the cart's own Exp. Share. Everyone else in the party who can still gain gets
-a share beside them: **GEN 5+** (half a fighter's share, the default),
+a share beside them, measured against what a fighter is really paid — the
+cart halves that when anyone holds an Exp. Share, so the bench's share
+shrinks with it: **GEN 5+** (half a fighter's share, the default),
 **BALANCED** (the same, only while below the level of the one that fought),
 **AVERAGE** (only while below the party's average level) or **CUSTOM** (10% to
 100%). Trainer battles, Lucky Eggs and traded Pokémon boost the bench as they
 boost a fighter, and the bench gains effort values as a holder would. Level-ups
 and new moves are shown one by one, as the cart shows them; the bench's
 "gained EXP. Points" lines are folded into one — *The rest of the party gained
-EXP. Points!*
+EXP. Points!* In the GBA mod manager it is three rows: **EXP SHARE** (on or off,
+from the next award — no relaunch), **SHARE MODE** and, for CUSTOM, **BENCH
+SHARE**.
 
 ### REUSABLE TMS on Gen 3
 
@@ -274,6 +278,12 @@ through the cart's own save on the first frame the cart itself would let you
 press START and save — in the field, nothing pending, no window up, and not
 mid-step. Never twice inside fifteen seconds. Your own START › SAVE resets the
 clock. A Poké Ball in the corner says it happened (**INDICATOR**).
+
+It never saves a **NEW GAME** you have not saved yourself. A GBA cart has one
+save file and NEW GAME starts over it without a word; only your own SAVE asks
+"There is already a saved file. Is it okay to overwrite it?" So a new game is
+left alone until you have saved it once, and from then on it is the save on
+the cart and AUTO SAVE looks after it. CONTINUE is a save you already chose.
 
 ### SOUND on Gen 3
 

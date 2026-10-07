@@ -296,9 +296,11 @@ return {
       suppress_hooks = { ["ui.options.rows"] = true },
       -- A GBA cart has the held Exp. Share and no Exp. All, and its battle has
       -- its own seams: a Gen 3 arm, with its mode in the schema rather than in
-      -- the save (FireRed's OPTION screen has no row for it to live on).
+      -- the save (FireRed's OPTION screen has no row for it to live on).  Its
+      -- switch is live: the GBA mod manager has no relaunch cue to show for a
+      -- switch that only takes effect at the next boot.
       gen3 = { dir = "Gen3QOL", entry = "expshare.lua", adapter = false,
-               suppress_hooks = false },
+               suppress_hooks = false, enabledKey = "enabled" },
     },
     {
       id = "rematch",

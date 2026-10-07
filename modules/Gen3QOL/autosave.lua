@@ -16,6 +16,14 @@
 -- doors is one save rather than three.  A fresh load or a fresh save resets
 -- the clock: nothing is new yet.
 --
+-- And never a NEW GAME the player has not saved.  A GBA cart has one save
+-- file, and NEW GAME starts over it without a word (src/ui/game3/boot.lua);
+-- the cart only asks "There is already a saved file. Is it okay to overwrite
+-- it?" when the player saves by hand.  An autosave there would write a new
+-- game over a forty-hour one -- and the next would take the backup with it --
+-- so a new game is left alone until the player's own START > SAVE has made it
+-- the save on the cart.  CONTINUE is a save the player already chose.
+--
 -- The indicator is a Poke Ball in the corner of the game screen for a
 -- moment after each write, drawn on `render.hud` in window pixels so it
 -- needs no font and sits outside the GBA's own windows.
@@ -44,6 +52,7 @@ return function(mod)
   })
 
   local state = {
+    armed = false,     -- this playthrough is the save on the cart; see above
     due = false,       -- an event has happened since the last write
     clock = 0,         -- seconds of play since the last write
     since = MIN_GAP,   -- seconds since the last write, or since load
@@ -72,15 +81,23 @@ return function(mod)
       or nil
     if type(id) == "table" then id = id.id end
     if id ~= nil and id ~= state.map then
-      -- The first map of a session is where the save already stands.
-      if state.map ~= nil then mark() end
+      -- The map a game boots onto is where the save already stands.  The
+      -- engine says which one that is (`via = "boot"`), and on CONTINUE it
+      -- enters it BEFORE it raises save.loaded (Game3:_handleBootAction), so
+      -- that event cannot be the one to forget the map by.
+      local boot = type(event) == "table" and event.via == "boot"
+      if state.map ~= nil and not boot then mark() end
       state.map = id
     end
   end)
-  mod.events:on("save.loaded", function() settle(); state.map = nil end)
-  mod.events:on("save.created", function() settle(); state.map = nil end)
-  -- The player's own START > SAVE, or anybody else's write: it is a save.
-  mod.events:on("save.writing", settle)
+  mod.events:on("save.loaded", function() settle(); state.armed = true end)
+  mod.events:on("save.created", function()
+    settle(); state.map = nil; state.armed = false
+  end)
+  -- The player's own START > SAVE, or anybody else's write: it is a save, and
+  -- whatever it wrote is now the save on the cart.  This never writes while
+  -- unarmed, so a write seen then was the player's.
+  mod.events:on("save.writing", function() settle(); state.armed = true end)
 
   local function standing()
     -- `require`, not `package.loaded`: the sandbox's package is a shim.
@@ -90,6 +107,7 @@ return function(mod)
   end
 
   local function mayWrite(game)
+    if not state.armed then return false end
     if type(game) ~= "table" or type(game.saveGame) ~= "function" then
       return false
     end

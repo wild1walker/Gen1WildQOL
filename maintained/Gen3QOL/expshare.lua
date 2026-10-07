@@ -15,10 +15,17 @@
 --
 -- A fighter's share is the cart's own arithmetic (pokefirered
 -- src/battle_script_commands.c:3113): the defeated species' base yield times
--- its level over seven, split between the Pokemon that fought.  A bench
--- Pokemon's is a fraction of that, then the same three boosts the cart gives
--- anyone -- a trainer battle, a Lucky Egg, a traded Pokemon -- and the effort
--- values with it, as a held Exp. Share would.
+-- its level over seven, split between the Pokemon that fought -- and, when
+-- anyone in the party holds an Exp. Share, only half of it is split between
+-- them, the other half going to the holders.  It is what a fighter is
+-- actually paid, so the bench's half never outgrows the fighter's whole.  A
+-- bench Pokemon's is a fraction of that, then the same three boosts the cart
+-- gives anyone -- a trainer battle, a Lucky Egg, a traded Pokemon -- and the
+-- effort values with it, as a held Exp. Share would.
+--
+-- EXP SHARE is a live switch here.  On Red and Gold the bundle's own menu
+-- says when a switch waits for a relaunch; on a GBA boot that menu is the
+-- engine's mod manager, which does not, so this one is read on every award.
 --
 -- Two seams.  `Experience.awardFoe` is wrapped to add the bench to what the
 -- cart awarded; its result is the list the battle's experience sequence walks
@@ -39,7 +46,13 @@ return function(mod)
   local percents = {}
   for pct = 10, 100, 10 do percents[#percents + 1] = { pct .. "%", pct } end
   mod.options:define({
-    { key = "mode", type = "choice", label = "EXP SHARE", default = "gen5",
+    -- The feature's master switch, donated to the bundle (features.lua gives
+    -- this arm `enabledKey = "enabled"`): the same stored key as the switch
+    -- on Red and Gold, so it means the same thing on every cart.
+    { key = "enabled", type = "toggle", label = "EXP SHARE", default = true,
+      help = "The whole party gains, not only the Pokemon that fought." },
+    { key = "mode", type = "choice", label = "SHARE MODE", default = "gen5",
+      visible_if = { key = "enabled", equals = true },
       choices = {
         { "OFF", "off" },
         { "GEN 5+", "gen5" },
@@ -65,6 +78,7 @@ return function(mod)
   end
 
   local function mode()
+    if mod.options:get("enabled") == false then return "off" end
     local value = mod.options:get("mode")
     if MODES[value] then return value end
     return "gen5"
@@ -81,6 +95,27 @@ return function(mod)
     if type(Pokemon.isEgg) == "function" and Pokemon.isEgg(mon) then return false end
     return (tonumber(mon.species or mon.speciesId) or 0) ~= 0
       and (tonumber(mon.hp) or 0) > 0
+  end
+
+  -- How many living party members hold the cart's own Exp. Share, asked the
+  -- way the cart's award asks it (experience.lua has_share).
+  local function holders(party)
+    local okH, HeldItems = pcall(require, "src.core.game3.battle.held_items")
+    if not (okH and type(HeldItems) == "table"
+            and type(HeldItems.effectOf) == "function"
+            and type(HeldItems.HOLD) == "table"
+            and HeldItems.HOLD.EXP_SHARE ~= nil) then
+      return 0
+    end
+    local n = 0
+    for i = 1, 6 do
+      local mon = party[i]
+      if alive(mon) then
+        local ok, effect = pcall(HeldItems.effectOf, mon.item or mon.heldItem)
+        if ok and effect == HeldItems.HOLD.EXP_SHARE then n = n + 1 end
+      end
+    end
+    return n
   end
 
   local function boosted(amount, isTrainer, per)
@@ -159,7 +194,10 @@ return function(mod)
     if isTrainer == nil then isTrainer = not st.wild end
     local yield = tonumber(Experience.expYield(foeSpecies)) or 0
     local calculated = math.floor(yield * math.max(1, tonumber(foeLevel) or 1) / 7)
-    local fighterShare = math.floor(calculated / math.max(1, count))
+    -- What a fighter is paid: the whole pool split between the fighters, or
+    -- half of it when anyone holds an Exp. Share (experience.lua awardFoe).
+    local pool = holders(party) > 0 and math.floor(calculated / 2) or calculated
+    local fighterShare = math.floor(pool / math.max(1, count))
     local share = math.floor(fighterShare * percent() / 100)
     if share <= 0 then return out end
 

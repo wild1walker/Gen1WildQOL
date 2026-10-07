@@ -291,15 +291,40 @@ local function expHarness()
     return { gained = amount, levels = levels,
              steps = mon.levelsUp and { { grewTo = levels[1] } } or {} }
   end
-  -- The cart's own award: every fighter alive, full share each, plus any
-  -- holder of the item -- enough of the real arithmetic for the bench to be
-  -- measured against.
+  -- The cart's held Exp. Share, the way the award asks after it
+  -- (held_items.effectOf on the held item).
+  local HeldItems = { HOLD = { EXP_SHARE = 25 } }
+  function HeldItems.effectOf(item) return item == "EXP_SHARE" and 25 or 0 end
+
+  -- The cart's own award (experience.lua awardFoe): 64 * 10 / 7 = 91 to split
+  -- between the Pokemon that fought -- or, when anyone holds an Exp. Share,
+  -- half of it split between them and the other half between the holders.
+  -- The real arithmetic, so the bench is measured against what a fighter is
+  -- really paid.
   function Experience.awardFoe(st, foe, opts)
+    local calculated = 91
+    local fighters, holders = 0, 0
+    for pi, mon in ipairs(st.playerParty) do
+      if mon.hp > 0 then
+        if foe.participants[pi] then fighters = fighters + 1 end
+        if mon.item == "EXP_SHARE" then holders = holders + 1 end
+      end
+    end
+    local exp, shareExp = 0, 0
+    if holders > 0 then
+      exp = math.floor(math.floor(calculated / 2) / math.max(1, fighters))
+      shareExp = math.floor(math.floor(calculated / 2) / holders)
+    else
+      exp = math.floor(calculated / math.max(1, fighters))
+    end
     local out = {}
     for pi, mon in ipairs(st.playerParty) do
-      if (foe.participants[pi] or mon.holdsShare) and mon.hp > 0 then
+      local fought, holds = foe.participants[pi], mon.item == "EXP_SHARE"
+      if (fought or holds) and mon.hp > 0 then
+        local amount = (fought and exp or 0) + (holds and shareExp or 0)
         out[#out + 1] = { mon = mon, partyIndex = pi, battler = {},
-                          amount = 91, result = { gained = 91, steps = {} } }
+                          amount = amount,
+                          result = { gained = amount, steps = {} } }
       end
     end
     return out
@@ -336,6 +361,7 @@ local function expHarness()
   end
 
   package.loaded["src.core.game3.pokemon"] = Pokemon
+  package.loaded["src.core.game3.battle.held_items"] = HeldItems
   package.loaded["src.core.game3.battle.experience"] = Experience
   package.loaded["src.core.game3.battle.exp_seq"] = ExpSeq
   package.loaded["src.core.game3.battle.battle_text"] = BattleText
@@ -387,17 +413,30 @@ do
   eq(got.LOW, 67, "and so does a Lucky Egg")
   ok(st.playerParty[2].evs == 1, "the bench gains effort values, as a holder would")
 
+  -- With the cart's own Exp. Share held, the cart halves the pool: the
+  -- fighter gets 45, the holder 45.  A fighter's share is what a fighter is
+  -- really paid, so the bench gets half of 45, not half of 91.
   st, foe = battle(true)
-  st.playerParty[3].holdsShare = true
+  st.playerParty[3].item = "EXP_SHARE"
   got = amounts(Experience.awardFoe(st, foe, {}))
-  eq(got.HIGH, 91, "a holder of the cart's own Exp. Share is left as the cart paid it")
+  eq(got.HIGH, 45, "a holder of the cart's own Exp. Share is left as the cart paid it")
+  eq(got.LEAD, 45, "and so is the fighter, on the half the cart leaves it")
+  eq(got.LOW, 22, "GEN 5+ with a holder: the bench gains half of what the "
+     .. "fighter was really paid, 22 -- not as much as the fighter")
+  mod.stored.mode, mod.stored.percent = "custom", 100
+  st, foe = battle(true)
+  st.playerParty[3].item = "EXP_SHARE"
+  got = amounts(Experience.awardFoe(st, foe, {}))
+  eq(got.LOW, 45, "CUSTOM 100% with a holder: a whole fighter's share, never "
+     .. "more than the fighter")
+  mod.stored.mode, mod.stored.percent = nil, nil
 
   st, foe = battle(true)
   foe.participants[2] = true
   got = amounts(Experience.awardFoe(st, foe, {}))
   eq(got.HIGH, 22,
      "two fighters split 91 at 45 each, and the bench gets half of one: 22")
-  eq(got.LOW, 91, "a second fighter is a fighter, paid by the cart")
+  eq(got.LOW, 45, "a second fighter is a fighter, paid by the cart")
 
   mod.stored.mode = "balanced"
   st, foe = battle(true)
@@ -423,6 +462,22 @@ do
   got = amounts(Experience.awardFoe(st, foe, {}))
   eq(got.LOW, nil, "OFF: the cart's award, untouched")
   mod.stored.mode, mod.stored.percent = nil, nil
+
+  -- The switch is live: the GBA mod manager has no relaunch cue, so a switch
+  -- that waited for one would look broken.  Read on every award.
+  eq(mod.schema.enabled and mod.schema.enabled.type, "toggle",
+     "the arm carries its own EXP SHARE switch")
+  eq(mod.schema.mode.label, "SHARE MODE",
+     "and its mode is not a second row called EXP SHARE")
+  mod.stored.enabled = false
+  st, foe = battle(true)
+  got = amounts(Experience.awardFoe(st, foe, {}))
+  eq(got.LOW, nil, "switched off mid-session: the very next award is the cart's")
+  eq(got.LEAD, 91, "with the fighter paid as the cart pays it")
+  mod.stored.enabled = nil
+  st, foe = battle(true)
+  got = amounts(Experience.awardFoe(st, foe, {}))
+  eq(got.LOW, 45, "and back on, the next one shares again")
 
   io.write("EXP SHARE: one line for the bench\n")
   st, foe = battle(true)
@@ -548,6 +603,89 @@ do
   eq(drawn, 0, "and it goes again")
 end
 
+local function saveRig()
+  local mod = install("modules/Gen3QOL/autosave.lua", armMod())
+  package.loaded["src.core.game3.player"] = { moving = false }
+  local rig = { writes = 0, mod = mod }
+  local game = { phase = "field" }
+  function game:quickSaveAllowed() return true end
+  function game:saveGame()
+    rig.writes = rig.writes + 1
+    mod.emit("save.writing", {})
+    return true
+  end
+  local update = mod.wrapped["core.update"]
+  function rig.frames(n)
+    for _ = 1, n do update(function() end, game, 1) end
+  end
+  return rig
+end
+
+do
+  io.write("AUTO SAVE: never a new game the player has not saved\n")
+  -- A GBA cart has one save file, and NEW GAME starts over it without a word;
+  -- only the player's own SAVE asks before writing over the old one.  An
+  -- autosave here would put a new game where a forty-hour one was.
+  local rig = saveRig()
+  local mod = rig.mod
+  mod.emit("save.created", {})
+  mod.emit("map.entered", { mapId = "FR_PALLET_TOWN_PLAYERS_HOUSE_2F", via = "boot" })
+  rig.frames(20)
+  mod.emit("map.entered", { mapId = "FR_PALLET_TOWN_PLAYERS_HOUSE_1F", via = "warp" })
+  mod.emit("battle.ended", {})
+  rig.frames(60)
+  eq(rig.writes, 0, "a new game the player has not saved is never written")
+  mod.stored.interval = 60
+  rig.frames(120)
+  eq(rig.writes, 0, "not by INTERVAL either")
+  mod.stored.interval = nil
+
+  -- The player's own START > SAVE: the cart asked about the old file and the
+  -- player said yes, so this playthrough is the save from here.
+  mod.emit("save.writing", {})
+  mod.emit("map.entered", { mapId = "FR_PALLET_TOWN", via = "warp" })
+  rig.frames(16)
+  eq(rig.writes, 1, "after the player's own save, a new area is saved again")
+
+  -- Back to the title and NEW GAME again: disarmed again.
+  mod.emit("save.created", {})
+  mod.emit("map.entered", { mapId = "FR_PALLET_TOWN_PLAYERS_HOUSE_2F", via = "boot" })
+  mod.emit("map.entered", { mapId = "FR_PALLET_TOWN_PLAYERS_HOUSE_1F", via = "warp" })
+  rig.frames(60)
+  eq(rig.writes, 1, "a second new game is left alone the same way")
+end
+
+do
+  io.write("AUTO SAVE: CONTINUE, and the first door after it\n")
+  local rig = saveRig()
+  local mod = rig.mod
+  -- The engine enters the map the save stands on BEFORE it raises
+  -- save.loaded (Game3:_handleBootAction), and says it is the boot map.
+  mod.emit("map.entered", { mapId = "FR_VIRIDIAN_POKEMON_CENTER_1F", via = "boot" })
+  mod.emit("save.loaded", {})
+  rig.frames(20)
+  eq(rig.writes, 0, "the map the save stands on is not a new area")
+  mod.emit("map.entered", { mapId = "FR_VIRIDIAN_CITY", via = "warp" })
+  rig.frames(1)
+  eq(rig.writes, 1, "the first door after CONTINUE is")
+
+  -- A soft reset back to CONTINUE on another map: a boot map is where its
+  -- save stands, whatever map was seen last.
+  rig.frames(20)
+  mod.emit("map.entered", { mapId = "FR_ROUTE_2", via = "boot" })
+  mod.emit("save.loaded", {})
+  rig.frames(20)
+  eq(rig.writes, 1, "a boot map is never a new area")
+
+  -- FireRed's Quest Log plays back first, so there save.loaded comes before
+  -- the boot map is entered: it is still where the save stands.
+  mod.emit("save.loaded", {})
+  rig.frames(20)
+  mod.emit("map.entered", { mapId = "FR_ROUTE_3", via = "boot" })
+  rig.frames(20)
+  eq(rig.writes, 1, "...nor when it is entered after the load")
+end
+
 -- ---------------------------------------------------------------- SOUND
 
 do
@@ -667,6 +805,24 @@ do
      "SPRINT's rows are in the schema FireRed's MOD OPTIONS lists")
   ok(byKey.expshare_enabled and byKey.expshare_mode,
      "EXP SHARE's switch and mode")
+  eq(byKey.expshare_enabled and byKey.expshare_enabled.label, "EXP SHARE",
+     "the switch is the arm's own row, donated as the master")
+  eq(byKey.expshare_mode and byKey.expshare_mode.label, "SHARE MODE",
+     "and the mode reads as a mode")
+
+  -- EXP SHARE's switch is live on Gen 3, so it is installed whatever the
+  -- switch says: stored OFF, it must still be there to be turned back on.
+  local Bundle2 = loader.run("runtime/bundle.lua", function(name)
+    return loader.run("runtime/" .. name .. ".lua")
+  end)
+  local feature
+  for _, f in ipairs(registry.features) do
+    if f.id == "expshare" then feature = f end
+  end
+  local live = Bundle2.forGeneration(feature, 3)
+  eq(live.enabledKey, "enabled", "on Gen 3 the feature names its live switch")
+  eq(Bundle2.forGeneration(feature, 1).enabledKey, nil,
+     "and on Red it is the bundle's relaunch switch, as it always was")
   ok(byKey.reusabletms_qol_reusable_tms,
      "REUSABLE TMS keeps the row key it has on every other cart")
   ok(byKey.autosave_enabled and byKey.autosave_interval, "AUTO SAVE's")
