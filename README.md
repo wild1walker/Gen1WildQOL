@@ -227,6 +227,10 @@ a rule Red lacked and the GBA already has, or is content for one game:
 | **ALL 151**, **ALL 251**, **GS BALL**, **NPC WALK** | Red's and Gold's own content and timing |
 | **MENU LAYOUT**, **MOD MANAGER** | the engine's own GBA START menu and manager; this bundle's options are in **MODS › Gen1WildQOL › OPTIONS** there |
 
+Ruby and Sapphire, which the engine runs in beta, are Gen 3 boots too: the
+same five install, and SPRINT follows their own running rules, which are
+Emerald's.
+
 Each of the four that needs one has a Gen 3 arm of its own, maintained here in
 `maintained/Gen3QOL/` and built into `modules/Gen3QOL/` like any other source
 (SOUND needs none), on the cart's own seams; `tests/gen3qol_test.lua` drives
