@@ -26,7 +26,8 @@
     saves a NEW GAME you have not saved yourself: a GBA cart has one save
     file, and only your own SAVE asks before writing over it.
   - **SOUND** — the low-HP siren beeps its count and stops; FireRed raises
-    the same hook with the same ctx.
+    the same hook with the same ctx. Its on/off switch applies from the next
+    start; **LOW HP BEEP › VANILLA** gives the cart's siren back at once.
 
   The rest are not loaded on Gen 3 — each is a screen or service the GBA
   already has, or one game's own content; the README says which and why.

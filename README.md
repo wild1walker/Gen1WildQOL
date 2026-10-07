@@ -292,6 +292,11 @@ FireRed's battle asks the same `battle.low_health_alarm` hook with the same
 `ctx`, once a frame, so the feature runs unchanged. A "beep" is half a second
 of the siren, as it is on Red.
 
+SOUND's own on/off switch takes effect the next time the game starts: it
+decides whether the feature is installed at all, and the GBA mod manager has
+no mark for that the way this bundle's own menu on Red and Gold does. **LOW HP
+BEEP › VANILLA** gives the cart's siren back straight away.
+
 ## What is different from the standalone mods
 
 - **EXP SHARE defaults to GEN 5+.** The fighters keep their full experience and
