@@ -3,7 +3,7 @@
 -- mod.find. Do not edit; rebuild.
 return {
   ["ExpShare"] = "maintained",
-  ["Gen151"] = "1.6.1",
+  ["Gen151"] = "1.8.0",
   ["Gen1AutoContinue"] = "1.3.0",
   ["Gen1AutoSave"] = "1.20.2",
   ["Gen1Follower"] = "1.8.0",

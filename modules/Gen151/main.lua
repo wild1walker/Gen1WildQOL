@@ -38,7 +38,7 @@ local MOD_ID = "gen151"
 -- load is the documented way to reach one: a mod's directory is not on
 -- package.path, and require() would only find it by accident of where the
 -- mod happens to be installed.
-local function submodule(mod, name)
+local function submodule(mod, name, ...)
   local source = mod:read(name)
   if not source then
     mod.log:error("%s is missing from %s -- reinstall the mod; the whole "
@@ -51,7 +51,7 @@ local function submodule(mod, name)
       tostring(err))
     return nil
   end
-  local ok, value = pcall(chunk)
+  local ok, value = pcall(chunk, ...)
   if not ok then
     mod.log:error("%s failed to load: %s -- reinstall the mod", name,
       tostring(value))
@@ -258,6 +258,50 @@ return function(mod)
 
   if opt("enabled") ~= true then
     mod.log:info("switched off in its own options; nothing registered")
+    return
+  end
+
+  -- ------- which cartridge this is, and which half of the mod that means
+  --
+  -- Everything below this point is ALL 151: a placement table researched
+  -- against KANTO maps, Red and Blue's version exclusives, and a hundred and
+  -- fifty-one entry dex.  None of its three inputs exists on Gold.
+  --
+  -- Run there anyway and it does not politely do nothing -- it reads Johto's
+  -- encounter registry with Kanto's shape and takes the game down:
+  --
+  --     mods/gen151/build.lua:36: attempt to index local 'record'
+  --     (a number value)
+  --
+  -- reported from a real Gold boot.  The manifest says `games: [gen1, gen2]`
+  -- and that is TRUE of the repository -- the Gen 2 half lives in gen2/ --
+  -- but `entry` is one file, so a standalone install ran the Gen 1 half on
+  -- both.  Inside the Gen1Wild bundle it never showed: features.lua carries
+  -- `gen1_only = true` on ALL 151 and lists ALL 251 and the GS BALL as their
+  -- own rows, so the bundle was choosing what this file has to choose here.
+  --
+  -- So the entry dispatches.  On Gold it installs the Gen 2 half -- ALL 251
+  -- and the GS BALL, the two features this mod's own changelog announced in
+  -- 1.6.0 and which a standalone install has never actually had -- and
+  -- returns before a single Kanto table is read.
+  local function generation()
+    local ok, GameVersion = pcall(require, "src.core.GameVersion")
+    if not (ok and type(GameVersion) == "table"
+            and type(GameVersion.generation) == "function") then
+      return 1
+    end
+    local okCall, value = pcall(GameVersion.generation)
+    return okCall and tonumber(value) or 1
+  end
+
+  if generation() == 2 then
+    -- Both are chunks that take the mod handle and wire themselves up, the
+    -- way the bundle's facade hands them over; neither reads an option of
+    -- its own, so `enabled` above is the whole gate.
+    submodule(mod, "gen2/main.lua", mod)
+    submodule(mod, "gen2/celebi.lua", mod)
+    mod.exports.enabled = true
+    mod.log:info("Gold, Silver or Crystal: ALL 251 and the GS BALL, not ALL 151")
     return
   end
 

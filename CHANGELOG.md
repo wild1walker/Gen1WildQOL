@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.35.0
+
+Re-pinned to **Gen151 1.8.0** (from 1.6.1).
+
+### Fixed
+
+- **ALL 251's Pokédex hints on Gold, Silver and Crystal say what is really in
+  the way.** The AREA page tells you what you need to reach a placed Pokémon,
+  and some of those lines were wrong:
+  - **MEW** said it was behind nothing. Its room in the Ruins of Alph opens
+    when you solve the chamber puzzle, and the hint now says **a SOLVED
+    PUZZLE**.
+  - **EKANS and MAREEP on Route 32** said SURF, because the whole route did.
+    SURF is only for TOTODILE in its water now; the grass needs nothing.
+  - **ARTICUNO in Ice Path B3F** now says **STRENGTH**, and **MOLTRES outside
+    Mt. Silver** says **16 BADGES**. Neither said anything before.
+- Gen151 1.6.2 also stops the standalone mod crashing on Gold. The bundle
+  never had that crash, because it only ever runs ALL 151 on Red, Blue and
+  Yellow, so nothing changes here.
+
 ## 1.34.0
 
 ### Added

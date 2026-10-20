@@ -48,12 +48,15 @@
 --                              SLOWKING, STEELIX, SCIZOR, KINGDRA, PORYGON2.
 --                              A trade evolution is not a missing habitat,
 --                              it is a missing cable, so it gets the cable.
---   the eleven statics         LAPRAS, SNORLAX, SUDOWOODO, the three birds,
---                              the three beasts, LUGIA, HO-OH.  All of them
---                              exist on the cartridge and none is renewable,
---                              so the answer is to let a fled or fainted one
---                              come back rather than to put a second copy in
---                              the grass.
+--   the eight statics          LAPRAS, SNORLAX, SUDOWOODO, the three beasts,
+--                              LUGIA, HO-OH.  All of them exist on the
+--                              cartridge, so the answer is to let a fled or
+--                              fainted one come back rather than to put a
+--                              second copy in the grass.  NOT the three Kanto
+--                              birds: Gen 2's statics are the thirteen
+--                              `loadwildmon` calls in its map scripts and the
+--                              birds are not among them, which is why they are
+--                              placed like MEWTWO and MEW.
 --
 -- And six babies that look missing and are not: PICHU, CLEFFA, IGGLYBUFF,
 -- SMOOCHUM, ELEKID and MAGBY all breed from adults already in the grass, and
@@ -65,29 +68,70 @@ local P = {}
 
 -- The rungs, in the order Johto opens them, spelled the way the game spells
 -- them because these strings reach the player through the FIELD NOTES box.
+--
+-- Not only field moves and badges.  Gen 151's ladder has "the SILPH SCOPE",
+-- "the FLUTE", "the BICYCLE" and "the SAFARI ZONE" on it, because a rung is
+-- whatever the player has to have DONE, not whatever HM they have to carry --
+-- and a rung nobody can look up is the one thing a hint must never print.
 P.GATES = {
   "CUT", "FLASH", "SURF", "WHIRLPOOL", "STRENGTH",
   "8 BADGES", "the LEAGUE", "16 BADGES",
+  -- The RUINS OF ALPH's inner rooms are behind a solved chamber puzzle: the
+  -- puzzle's own `setmapscene RUINS_OF_ALPH_INNER_CHAMBER`
+  -- (../pokecrystal/maps/RuinsOfAlphKabutoChamber.asm:36) is what opens the
+  -- floor, so the chamber is not somewhere a player walks to.  Any of the
+  -- four will do, which is why the rung names the act and not a chamber.
+  "a SOLVED PUZZLE",
 }
 
 -- Which rung each map this table touches sits on.  A map with no entry is
 -- open Johto -- reachable on foot with nothing in the bag -- and prints no
 -- requirement line, because there is nothing to require.
+--
+-- A key may name a METHOD as well as a map -- "ROUTE_32:water" -- for the one
+-- shape a flat map->gate table gets wrong: a map whose WATER is behind
+-- something its grass is not.  Route 32 is exactly that and used to be spelled
+-- `ROUTE_32 = "SURF"` with a comment saying it meant the water table, which no
+-- reader of the table was in a position to act on: the two Set B rows that
+-- land in Route 32's GRASS were being told to bring SURF to a route a player
+-- walks down on the way to Union Cave.  Read through `P.gateFor`, never by
+-- indexing this table directly.
 P.MAP_GATES = {
   ILEX_FOREST = "CUT",
   DARK_CAVE_VIOLET_ENTRANCE = "FLASH",
   DARK_CAVE_BLACKTHORN_ENTRANCE = "FLASH",
-  ROUTE_32 = "SURF",          -- the water table, not the grass
+  ["ROUTE_32:water"] = "SURF",
   ROUTE_41 = "SURF",
   MOUNT_MORTAR_B1F = "STRENGTH",
   ICE_PATH_1F = "STRENGTH",
+  -- The floor ARTICUNO is on is three below the one that needs STRENGTH, so
+  -- it cannot be open Johto; without a row here the table said it was.
+  ICE_PATH_B3F = "STRENGTH",
   WHIRL_ISLAND_B1F = "WHIRLPOOL",
   WHIRL_ISLAND_B2F = "WHIRLPOOL",
   -- Kanto in its entirety is behind the Elite Four in Gen 2.
   ROUTE_2 = "the LEAGUE", ROUTE_3 = "the LEAGUE", ROUTE_10_NORTH = "the LEAGUE",
   ROUTE_25 = "the LEAGUE", VICTORY_ROAD = "8 BADGES",
   SILVER_CAVE_ROOM_3 = "16 BADGES",
+  -- The mountain's slope, which is behind the same badge count as the room
+  -- inside it -- MOLTRES's own row already says "behind sixteen badges" and
+  -- the gate table was the only place that did not.
+  SILVER_CAVE_OUTSIDE = "16 BADGES",
 }
+
+-- The gate for one row: the method-qualified key first, then the map's own.
+--
+-- One function so the spawn, the hint and the spoiler table cannot answer this
+-- differently -- the same reason placements.lua is a single source of truth in
+-- the first place.
+function P.gateFor(map, method)
+  if type(map) ~= "string" then return nil end
+  if type(method) == "string" then
+    local scoped = P.MAP_GATES[map .. ":" .. method]
+    if scoped then return scoped end
+  end
+  return P.MAP_GATES[map]
+end
 
 -- ------------------------------------------------------------------ SET A
 --
@@ -211,8 +255,13 @@ P.common = {
     why = "CERULEAN CAVE is sealed in Gen 2 and MT.SILVER is the cave that "
       .. "replaced it: the deepest room, behind sixteen badges, which asks "
       .. "more than the Kanto cave ever did" },
+  -- The one row here that carries its OWN gate, for the same reason Kanto's
+  -- MEW does: what stands between a player and this room is not a move or a
+  -- badge, and a map gate could not say so.  MAP_GATES answers for getting to
+  -- a place; this answers for getting IN.
   { species = "MEW", map = "RUINS_OF_ALPH_INNER_CHAMBER", method = "grass",
     band = "mid", tier = "VERY_RARE", feature = "gifts",
+    gate = "a SOLVED PUZZLE",
     why = "the one room in Johto you reach by solving something rather than "
       .. "by walking, which is the shape MEW's Gen 1 placement had: the "
       .. "MANSION journals made you read before the forest would answer" },
